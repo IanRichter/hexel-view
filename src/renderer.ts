@@ -3,6 +3,7 @@ import path from 'path';
 import { Parser } from './parser';
 import { Compiler } from './compiler';
 import { View } from './view';
+import { Node } from './nodes/node';
 
 export class Renderer {
 
@@ -11,12 +12,20 @@ export class Renderer {
 
 	// ========================================================================
 
-	public constructor({ views, cache }: RendererOptions = DefaultRendererOptions) {
-		this.baseViewPath = path.resolve(__dirname, views);
+	public constructor(options: RendererOptions = DefaultRendererOptions) {
+		this.baseViewPath = path.resolve(process.cwd(), options.views);
 
-		if (cache) {
+		if (options.cache) {
 			this.viewCache = new Map<string, View>();
 		}
+	}
+
+	// TODO: Remove
+	public renderAST(viewPath: string, context: object = {}): Node {
+		let viewSource = this.getViewSource(viewPath);
+		let parser = new Parser();
+		let viewAST = parser.parse(viewSource);
+		return viewAST;
 	}
 
 	/**
@@ -46,6 +55,14 @@ export class Renderer {
 	public renderString(viewSource, context = {}): string {
 		let view = this.buildView(viewSource);
 		return view.render(context);
+	}
+
+	/**
+	 * Precompiles all the views found within your views directory.
+	 * Can be used within a build pipeline to improve runtime performance.
+	 */
+	public precompileViews(): void {
+		// TODO: Implement this
 	}
 
 	// ========================================================================
