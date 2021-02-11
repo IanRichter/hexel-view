@@ -1,3 +1,9 @@
+# NodeJS
 node_modules/
 *.log
+
+# Build artifacts
 dist/
+
+# IDE
+.vscode/

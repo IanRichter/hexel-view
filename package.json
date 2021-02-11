@@ -11,7 +11,7 @@
 	},
 	"license": "MIT",
 	"engines": {
-		"node": "14.x",
+		"node": ">=14.x",
 		"yarn": "1.x"
 	},
 	"main": "dist/index.js",
@@ -21,6 +21,10 @@
 		"prepublish": "tsc"
 	},
 	"devDependencies": {
+		"@types/node": "^14.14.25",
 		"typescript": "^4.1.5"
+	},
+	"dependencies": {
+		"@babel/parser": "^7.12.16"
 	}
 }

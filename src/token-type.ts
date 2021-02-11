@@ -1,0 +1,63 @@
+export enum TokenType {
+	Scope = 'Scope',
+	Print = 'Print',
+	If = 'If',
+	ElseIf = 'ElseIf',
+	Else = 'Else',
+	Switch = 'Switch',
+	Case = 'Case',
+	DefaultCase = 'DefaultCase',
+	Foreach = 'Foreach',
+	While = 'While',
+	Render = 'Render',
+	RenderDefaultSlot = 'RenderDefaultSlot',
+	RenderSlot = 'RenderSlot',
+	ContentFor = 'ContentFor',
+
+	BlockClosingStart = 'BlockClosingStart',
+
+	BlockAttributeKeyword = 'BlockAttributeKeyword',
+	ContextAttributeKeyword = 'ContextAttributeKeyword',
+
+	ExpressionStart = 'ExpressionStart',
+	ExpressionEnd = 'ExpressionEnd',
+	ExpressionStartEscape = 'ExpressionStartEscape',
+	ExpressionEndEscape = 'ExpressionEndEscape',
+	ExpressionCommentStart = 'ExpressionCommentStart',
+
+	CommentStart = 'CommentStart',
+	CommentEnd = 'CommentEnd',
+	CDataStart = 'CDataStart',
+	CDataEnd = 'CDataEnd',
+	Doctype = 'Doctype',
+	ElementStart = 'ElementStart',
+	ElementClosingStart = 'ElementClosingStart',
+
+	LeftAngleBrace = 'LeftAngleBrace',
+	RightAngleBrace = 'RightAngleBrace',
+	LeftCurlyBrace = 'LeftCurlyBrace',
+	RightCurlyBrace = 'RightCurlyBrace',
+	LeftSquareBrace = 'LeftSquareBrace',
+	RightSquareBrace = 'RightSquareBrace',
+	ForwardSlash = 'ForwardSlash',
+	At = 'At',
+	QuestionMark = 'QuestionMark',
+	Underscore = 'Underscore',
+	Dollar = 'Dollar',
+	Equals = 'Equals',
+	Dash = 'Dash',
+	DoubleDash = 'DoubleDash',
+	Dot = 'Dot',
+	Comma = 'Comma',
+	DoubleQuote = 'DoubleQuote',
+	SingleQuote = 'SingleQuote',
+	Backtick = 'Backtick',
+
+	InKeyword = 'InKeyword',
+
+	Whitespace = 'Whitespace',
+	Letters = 'Letters',
+	Numbers = 'Numbers',
+
+	Unknown = 'Unknown'
+}
