@@ -102,19 +102,7 @@ E.g.
 <js @if="<condition>">
 	...
 </js>
-```
-
-```html
-<js @if="<condition>">
-	...
-</js>
 <js @else-if="<condition>">
-	...
-</js>
-```
-
-```html
-<js @if="<condition>">
 	...
 </js>
 <js @else>
@@ -131,14 +119,6 @@ E.g.
 	<js @case="<expression>">
 		...
 	</js>
-</js>
-```
-
-```html
-<js @switch="<expression>">
-	<js @case="<expression>">
-		...
-	</js>
 	<js @default>
 		...
 	</js>
@@ -149,39 +129,21 @@ E.g.
 
 ### Array iteration
 ```html
-<js @foreach="<value> in <array>">
-	...
-</js>
-```
-
-```html
-<js @foreach="<value>, <index> in <array>">
+<js @foreach="<value>[, <index>] in <array>">
 	...
 </js>
 ```
 
 ### Object iteration
 ```html
-<js @foreach="<key> in <object>">
-	...
-</js>
-```
-
-```html
-<js @foreach="<key>, <value> in <object>">
-	...
-</js>
-```
-
-```html
-<js @foreach="<key>, <value>, <index> in <object>">
+<js @foreach="<key>[, <value>[, <index>]] in <object>">
 	...
 </js>
 ```
 
 ### Empty iteration alternative
 ```html
-<js @foreach="<item> in <items>">
+<js @foreach="...">
 	...
 </js>
 <js @else>
