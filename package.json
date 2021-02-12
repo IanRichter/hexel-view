@@ -18,10 +18,17 @@
 	"types": "dist/index.d.ts",
 	"scripts": {
 		"build": "tsc",
-		"prepublish": "tsc"
+		"test": "cross-env TS_NODE_FILES=true mocha --exit --require ts-node/register --colors test/**/*.test.ts",
+		"coverage": "echo \"No coverage yet\""
 	},
 	"devDependencies": {
+		"@types/chai": "^4.2.15",
+		"@types/mocha": "^8.2.0",
 		"@types/node": "^14.14.25",
+		"chai": "^4.3.0",
+		"cross-env": "^7.0.3",
+		"mocha": "^8.3.0",
+		"ts-node": "^9.1.1",
 		"typescript": "^4.1.5"
 	},
 	"dependencies": {

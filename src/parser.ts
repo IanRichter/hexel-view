@@ -59,7 +59,7 @@ export class Parser {
 		this.expressionEndEscapeDelimiter = options.expressionEndEscapeDelimiter;
 	}
 
-	public parse(viewSource: string): Node {
+	public parse(viewSource: string): TemplateNode {
 		this.lexer = new Lexer({
 			inputString: viewSource,
 			blockTagName: this.blockTagName,
@@ -75,7 +75,7 @@ export class Parser {
 
 	// ========================================================================
 
-	private parseTemplate(): Node {
+	private parseTemplate(): TemplateNode {
 		let node = new TemplateNode(this.lexer.getPosition());
 
 		while (!this.isEOF()) {
@@ -361,7 +361,7 @@ export class Parser {
 		}
 
 		if (node.identifiers.length === 0) {
-			throw new ParseError('Expected one of more identifiers.', this.getTokenPostion());
+			throw new ParseError('Expected one or more identifiers.', this.getTokenPostion());
 		}
 
 		this.expect(TokenType.InKeyword);

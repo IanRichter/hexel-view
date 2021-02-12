@@ -232,6 +232,7 @@ export class Lexer {
 			return token;
 		}
 
+		// TODO: Change this to be case insensitive matching
 		if (this.matchesSubstring('DOCTYPE')) {
 			token.type = TokenType.Doctype;
 			token.symbol += this.expectSubstring('DOCTYPE');

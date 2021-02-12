@@ -14,3 +14,11 @@ npm install hexel-view
 - Enhanced HTML attributes
 - Partials
 - Layouts
+
+## TODO
+
+- Write tests
+
+## Bugs
+
+- Doctype must be case insensitive

@@ -3,9 +3,10 @@
 		"target": "ES6",
 		"module": "commonjs",
 		"lib": ["es2019", "es2017", "es7", "es6"],
+		"esModuleInterop": true,
 		"declaration": true,
-		"outDir": "dist",
-		"esModuleInterop": true
+		"sourceMap": true,
+		"outDir": "dist"
 	},
 	"exclude": [
 		"node_modules",
