@@ -7,6 +7,7 @@ npm install hexel-view
 
 ## TODO
 - Split expression into two types: Output and non-output
+- Add `@extend` support
 - Write tests
 
 ## Bugs
