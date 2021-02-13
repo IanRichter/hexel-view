@@ -1,8 +1,8 @@
-import { JSExpression } from '../js-expression';
+import { JSValueExpression } from '../js-types';
 import { ElementAttributeNode } from './element-attribute-node';
 
 export class NormalAttributeNode extends ElementAttributeNode {
 
-	public values: (JSExpression | string)[] = [];
+	public values: (JSValueExpression | string)[] = [];
 
 }

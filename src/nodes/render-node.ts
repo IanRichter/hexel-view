@@ -1,9 +1,9 @@
-import { JSExpression } from '../js-expression';
+import { JSValueExpression } from '../js-types';
 import { Node } from './node';
 
 export class RenderNode extends Node {
 
 	public templatePath: string = null;
-	public context: JSExpression = null;
+	public context: JSValueExpression = null;
 
 }

@@ -6,6 +6,7 @@ npm install hexel-view
 ```
 
 ## TODO
+- Split expression into two types: Output and non-output
 - Write tests
 
 ## Bugs

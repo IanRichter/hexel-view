@@ -5,7 +5,7 @@ async function main() {
 		views: './test/views'
 	});
 
-	let result = renderer.renderAST('test.html', {});
+	let result = renderer.render('test.html', {});
 	console.log(result);
 }
 

@@ -1,4 +1,5 @@
 import { parse } from '@babel/parser';
+import * as Types from '@babel/types';
 import { Lexer } from './lexer';
 import { TemplateNode } from './nodes/template-node';
 import { ParseError } from './parse-error';
@@ -35,7 +36,8 @@ import { AppendExpressionAttributeNode } from './nodes/append-expression-attribu
 import { OutputExpressionAttributeNode } from './nodes/output-expression-attribute-node';
 import { WhitespaceNode } from './nodes/whitespace-node';
 import { TextNode } from './nodes/text-node';
-import { JSExpression } from './js-expression';
+import { ParserOptions } from './parser-options';
+import { JSValueExpression, JSStatement } from './js-types';
 
 export class Parser {
 
@@ -50,16 +52,23 @@ export class Parser {
 
 	// ========================================================================
 
-	public constructor(options: ParserOptions = DefaultParserOptions) {
-		this.blockTagName = options.blockTagName;
-		this.expressionStartDelimiter = options.expressionStartDelimiter;
-		this.expressionStartEscapeDelimiter = options.expressionStartEscapeDelimiter;
-		this.expressionCommentStartDelimiter = options.expressionCommentStartDelimiter;
-		this.expressionEndDelimiter = options.expressionEndDelimiter;
-		this.expressionEndEscapeDelimiter = options.expressionEndEscapeDelimiter;
+	public constructor({
+		blockTagName = 'js',
+		expressionStartDelimiter = '{{',
+		expressionStartEscapeDelimiter = '{{{',
+		expressionCommentStartDelimiter = '{{#',
+		expressionEndDelimiter = '}}',
+		expressionEndEscapeDelimiter = '}}}'
+	}: ParserOptions = {}) {
+		this.blockTagName = blockTagName;
+		this.expressionStartDelimiter = expressionStartDelimiter;
+		this.expressionStartEscapeDelimiter = expressionStartEscapeDelimiter;
+		this.expressionCommentStartDelimiter = expressionCommentStartDelimiter;
+		this.expressionEndDelimiter = expressionEndDelimiter;
+		this.expressionEndEscapeDelimiter = expressionEndEscapeDelimiter;
 	}
 
-	public parse(viewSource: string): TemplateNode {
+	public parse(filename: string, viewSource: string): TemplateNode {
 		this.lexer = new Lexer({
 			inputString: viewSource,
 			blockTagName: this.blockTagName,
@@ -70,13 +79,13 @@ export class Parser {
 			expressionEndEscapeDelimiter: this.expressionEndEscapeDelimiter
 		});
 
-		return this.parseTemplate();
+		return this.parseTemplate(filename, viewSource);
 	}
 
 	// ========================================================================
 
-	private parseTemplate(): TemplateNode {
-		let node = new TemplateNode(this.lexer.getPosition());
+	private parseTemplate(filename: string, viewSource: string): TemplateNode {
+		let node = new TemplateNode(this.lexer.getPosition(), filename, viewSource);
 
 		while (!this.isEOF()) {
 			node.childNodes.push(this.parseNode());
@@ -159,7 +168,7 @@ export class Parser {
 	private parsePrintNode(): PrintNode {
 		let node = new PrintNode(this.getTokenPostion());
 		this.expect(TokenType.Print);
-		node.expression = this.parseOutputExpression(this.parseBlockValueString());
+		node.expression = this.parseJSValueExpression(this.parseBlockValueString());
 		this.consumeOptional(TokenType.Whitespace);
 
 		if (this.matches(TokenType.BlockAttributeKeyword)) {
@@ -196,6 +205,7 @@ export class Parser {
 			this.expect(TokenType.RightAngleBrace);
 		}
 		else {
+			node.hasBlock = true;
 			this.expect(TokenType.RightAngleBrace);
 			node.childNodes = this.parseNodeUntilMatches(TokenType.BlockClosingStart);
 			this.parseBlockClosingNode();
@@ -207,7 +217,7 @@ export class Parser {
 	private parseIfNode(): IfNode {
 		let node = new IfNode(this.getTokenPostion());
 		this.expect(TokenType.If);
-		node.condition = this.parseOutputExpression(this.parseBlockValueString());
+		node.condition = this.parseJSValueExpression(this.parseBlockValueString());
 		this.consumeOptional(TokenType.Whitespace);
 		this.expect(TokenType.RightAngleBrace);
 		node.childNodes = this.parseNodeUntilMatches(TokenType.BlockClosingStart);
@@ -239,7 +249,7 @@ export class Parser {
 	private parseElseIfNode(): ElseIfNode {
 		let node = new ElseIfNode(this.getTokenPostion());
 		this.expect(TokenType.ElseIf);
-		node.condition = this.parseOutputExpression(this.parseBlockValueString());
+		node.condition = this.parseJSValueExpression(this.parseBlockValueString());
 		this.consumeOptional(TokenType.Whitespace);
 		this.expect(TokenType.RightAngleBrace);
 		node.childNodes = this.parseNodeUntilMatches(TokenType.BlockClosingStart);
@@ -281,7 +291,7 @@ export class Parser {
 	private parseSwitchNode(): SwitchNode {
 		let node = new SwitchNode(this.getTokenPostion());
 		this.expect(TokenType.Switch);
-		node.expression = this.parseOutputExpression(this.parseBlockValueString());
+		node.expression = this.parseJSValueExpression(this.parseBlockValueString());
 		this.consumeOptional(TokenType.Whitespace);
 		this.expect(TokenType.RightAngleBrace);
 
@@ -314,7 +324,7 @@ export class Parser {
 	private parseCaseNode(): CaseNode {
 		let node = new CaseNode(this.getTokenPostion());
 		this.expect(TokenType.Case);
-		node.expression = this.parseOutputExpression(this.parseBlockValueString());
+		node.expression = this.parseJSValueExpression(this.parseBlockValueString());
 		this.consumeOptional(TokenType.Whitespace);
 		this.expect(TokenType.RightAngleBrace);
 		node.childNodes = this.parseNodeUntilMatches(TokenType.BlockClosingStart);
@@ -366,7 +376,7 @@ export class Parser {
 
 		this.expect(TokenType.InKeyword);
 		this.consumeOptional(TokenType.Whitespace);
-		node.collection = this.parseOutputExpression({
+		node.collection = this.parseJSValueExpression({
 			position: this.getTokenPostion(),
 			valueString: this.consumeWhile(() => !this.matches(quote.type))
 		});
@@ -399,7 +409,7 @@ export class Parser {
 	private parseWhileNode(): WhileNode {
 		let node = new WhileNode(this.getTokenPostion());
 		this.expect(TokenType.While);
-		node.condition = this.parseOutputExpression(this.parseBlockValueString());
+		node.condition = this.parseJSValueExpression(this.parseBlockValueString());
 		this.consumeOptional(TokenType.Whitespace);
 		this.expect(TokenType.RightAngleBrace);
 		node.childNodes = this.parseNodeUntilMatches(TokenType.BlockClosingStart);
@@ -416,7 +426,7 @@ export class Parser {
 
 		if (this.matches(TokenType.ContextAttributeKeyword)) {
 			this.consume();
-			node.context = this.parseOutputExpression(this.parseBlockValueString());
+			node.context = this.parseJSValueExpression(this.parseBlockValueString());
 			this.consumeOptional(TokenType.Whitespace);
 		}
 
@@ -488,7 +498,7 @@ export class Parser {
 	private parseExpressionNode(): ExpressionNode {
 		let node = new ExpressionNode(this.getTokenPostion());
 		this.expect(TokenType.ExpressionStart);
-		node.expression = this.parseAnyExpression({
+		node.statement = this.parseJSStatement({
 			position: this.getTokenPostion(),
 			valueString: this.consumeWhile(() => !this.matches(TokenType.ExpressionEnd))
 		});
@@ -617,7 +627,7 @@ export class Parser {
 			switch (this.peek().type) {
 				case TokenType.ExpressionStart: {
 					this.consume();
-					node.values.push(this.parseOutputExpression({
+					node.values.push(this.parseJSValueExpression({
 						position: this.getTokenPostion(),
 						valueString: this.consumeWhile(() => !this.matches(TokenType.ExpressionEnd))
 					}));
@@ -659,7 +669,7 @@ export class Parser {
 		this.expect(TokenType.Equals);
 		this.consumeOptional(TokenType.Whitespace);
 		node.quote = this.expectOneOf(HTML_QUOTE_TOKENS);
-		node.condition = this.parseOutputExpression({
+		node.condition = this.parseJSValueExpression({
 			position: this.lexer.getPosition(),
 			valueString: this.lexer.consumeRawUntilMatches(node.quote.symbol)
 		});
@@ -677,7 +687,7 @@ export class Parser {
 		this.expect(TokenType.Equals);
 		this.consumeOptional(TokenType.Whitespace);
 		node.quote = this.expectOneOf(HTML_QUOTE_TOKENS);
-		node.condition = this.parseOutputExpression({
+		node.condition = this.parseJSValueExpression({
 			position: this.lexer.getPosition(),
 			valueString: this.lexer.consumeRawUntilMatches(node.quote.symbol)
 		});
@@ -693,7 +703,7 @@ export class Parser {
 		this.expect(TokenType.Equals);
 		this.consumeOptional(TokenType.Whitespace);
 		node.quote = this.expectOneOf(HTML_QUOTE_TOKENS);
-		node.expression = this.parseOutputExpression({
+		node.expression = this.parseJSValueExpression({
 			position: this.lexer.getPosition(),
 			valueString: this.lexer.consumeRawUntilMatches(node.quote.symbol)
 		});
@@ -744,57 +754,49 @@ export class Parser {
 		return node;
 	}
 
-	private parseOutputExpression(blockValue: BlockValue): JSExpression {
-		return this.parseJSExpression(
-			blockValue.position,
-			blockValue.valueString,
-			['ExpressionStatement']
-		);
-	}
+	private parseJSValueExpression(blockValue: BlockValue): JSValueExpression {
+		let statement = this.parseJSCode(blockValue.position, blockValue.valueString);
 
-	private parseAnyExpression(blockValue: BlockValue): JSExpression {
-		return this.parseJSExpression(
-			blockValue.position,
-			blockValue.valueString,
-			['ExpressionStatement', 'VariableDeclaration']
-		);
-	}
-
-	private parseJSExpression(position: Position, valueString: string, supportedTypes: string[]): JSExpression {
-		if (['{', '"', '\'', '`'].includes(valueString[0])) {
-			valueString = `(${valueString})`;
+		if (statement.type !== 'ExpressionStatement') {
+			throw new ParseError('Encountered unsupported expression', blockValue.position);
 		}
 
-		let { program } = parse(valueString, {
+		return statement.expression as JSValueExpression;
+	}
+
+	private parseJSStatement(blockValue: BlockValue): JSStatement {
+		let statement = this.parseJSCode(blockValue.position, blockValue.valueString);
+
+		let allowedTypes = ['ExpressionStatement', 'VariableDeclaration'];
+		if (!allowedTypes.includes(statement.type)) {
+			throw new ParseError('Encountered unsupported expression.', blockValue.position);
+		}
+
+		if (statement.type === 'VariableDeclaration' && statement.kind !== 'let') {
+			throw new ParseError(`Encountered unsupported variable declaration. Only 'let' is allowed.`, blockValue.position);
+		}
+
+		return statement as JSStatement;
+	}
+
+	private parseJSCode(position: Position, code: string): Types.Node {
+		if (['{', '"', '\'', '`'].includes(code[0])) {
+			code = `(${code})`;
+		}
+
+		let { program } = parse(code, {
 			allowAwaitOutsideFunction: true
 		});
 
 		if (program.body.length === 0) {
-			throw new ParseError('Expected an expression.', position);
+			throw new ParseError('Expected a statement or expression.', position);
 		}
 
 		if (program.body.length > 1) {
 			throw new ParseError('Cannot have more than one expression here.', position);
 		}
 
-		let expressionNode = program.body[0];
-
-		if (!supportedTypes.includes(expressionNode.type)) {
-			throw new ParseError('Expression type not supported in this context.', position);
-		}
-
-		switch (expressionNode.type) {
-			case 'ExpressionStatement':
-				return new JSExpression(expressionNode.expression);
-			case 'VariableDeclaration':
-				if (expressionNode.kind !== 'let') {
-					throw new ParseError(`Encountered unsupported variable declaration. Only 'let' is allowed.`, position);
-				}
-
-				return new JSExpression(expressionNode);
-			default:
-				throw new ParseError('Encountered unsupported expression.', position);
-		}
+		return program.body[0];
 	}
 
 	// ========================================================================
@@ -882,28 +884,10 @@ export class Parser {
 
 }
 
-export interface ParserOptions {
-	blockTagName?: string;
-	expressionStartDelimiter?: string;
-	expressionStartEscapeDelimiter?: string;
-	expressionCommentStartDelimiter?: string;
-	expressionEndDelimiter?: string;
-	expressionEndEscapeDelimiter?: string;
-}
-
 interface BlockValue {
 	position: Position;
 	valueString: string;
 }
-
-const DefaultParserOptions = {
-	blockTagName: 'js',
-	expressionStartDelimiter: '{{',
-	expressionStartEscapeDelimiter: '{{{',
-	expressionCommentStartDelimiter: '{{#',
-	expressionEndDelimiter: '}}',
-	expressionEndEscapeDelimiter: '}}}'
-};
 
 const VOID_ELEMENTS: string[] = [
 	'area',

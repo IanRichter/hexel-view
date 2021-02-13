@@ -1,8 +1,8 @@
-import { JSExpression } from '../js-expression';
+import { JSValueExpression } from '../js-types';
 import { ElementAttributeNode } from './element-attribute-node';
 
 export class BooleanExpressionAttributeNode extends ElementAttributeNode {
 
-	public condition: JSExpression = null;
+	public condition: JSValueExpression = null;
 
 }

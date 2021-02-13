@@ -17,6 +17,7 @@
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
 	"scripts": {
+		"try": "ts-node test/test.ts",
 		"build": "tsc",
 		"test": "cross-env TS_NODE_FILES=true mocha --exit --require ts-node/register --colors test/**/*.test.ts",
 		"coverage": "nyc npm run test"

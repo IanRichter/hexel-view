@@ -1,8 +1,8 @@
-import { JSExpression } from '../js-expression';
+import { JSValueExpression } from '../js-types';
 import { CompositeNode } from './composite-node';
 
 export class CaseNode extends CompositeNode {
 
-	public expression: JSExpression = null;
+	public expression: JSValueExpression = null;
 
 }

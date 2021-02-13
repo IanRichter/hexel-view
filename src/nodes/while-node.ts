@@ -1,8 +1,8 @@
-import { JSExpression } from '../js-expression';
+import { JSValueExpression } from '../js-types';
 import { CompositeNode } from './composite-node';
 
 export class WhileNode extends CompositeNode {
 
-	public condition: JSExpression = null;
+	public condition: JSValueExpression = null;
 
 }
