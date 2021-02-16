@@ -1,6 +1,6 @@
 import { Node } from './node';
 
-export class RenderSlotNode extends Node {
+export class RenderContentNode extends Node {
 
 	public slotName: string = null;
 

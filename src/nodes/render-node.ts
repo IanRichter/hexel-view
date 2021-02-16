@@ -3,7 +3,7 @@ import { Node } from './node';
 
 export class RenderNode extends Node {
 
-	public templatePath: string = null;
+	public viewPath: string = null;
 	public context: JSValueExpression = null;
 
 }

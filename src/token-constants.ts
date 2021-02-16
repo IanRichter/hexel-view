@@ -5,19 +5,6 @@ export const HTML_QUOTE_TOKENS: TokenType[] = [
 	TokenType.SingleQuote
 ];
 
-export const INVALID_NODE_START_TOKENS: TokenType[] = [
-	TokenType.ElseIf,
-	TokenType.Else,
-	TokenType.Case,
-	TokenType.DefaultCase,
-
-	TokenType.BlockClosingStart,
-
-	TokenType.ExpressionEnd,
-
-	TokenType.ElementClosingStart
-];
-
 export const INVALID_TEXT_TOKENS: TokenType[] = [
 	TokenType.Scope,
 	TokenType.Print,
@@ -30,8 +17,8 @@ export const INVALID_TEXT_TOKENS: TokenType[] = [
 	TokenType.Foreach,
 	TokenType.While,
 	TokenType.Render,
-	TokenType.RenderDefaultSlot,
-	TokenType.RenderSlot,
+	TokenType.Layout,
+	TokenType.RenderContent,
 	TokenType.ContentFor,
 
 	TokenType.BlockClosingStart,
@@ -62,7 +49,9 @@ export const NORMAL_ATTRIBUTE_STRING_TERMINATING_TOKENS: TokenType[] = [
 	TokenType.ExpressionStart,
 	TokenType.ExpressionEnd,
 	TokenType.PrintExpressionStart,
-	TokenType.CommentExpressionStart
+	TokenType.CommentExpressionStart,
+	// TokenType.ExpressionStartEscape,
+	// TokenType.ExpressionEndEscape
 ];
 
 export const VARIABLE_NAME_START_TOKENS: TokenType[] = [

@@ -1,6 +1,7 @@
 export enum TokenType {
+	EndOfFile = 'EndOfFile',
+
 	Scope = 'Scope',
-	Print = 'Print',
 	If = 'If',
 	ElseIf = 'ElseIf',
 	Else = 'Else',
@@ -10,10 +11,10 @@ export enum TokenType {
 	Foreach = 'Foreach',
 	While = 'While',
 	Render = 'Render',
-	RenderDefaultSlot = 'RenderDefaultSlot',
-	RenderSlot = 'RenderSlot',
+	Layout = 'Layout',
+	RenderContent = 'RenderContent',
 	ContentFor = 'ContentFor',
-
+	Print = 'Print',
 	BlockClosingStart = 'BlockClosingStart',
 
 	BlockAttributeKeyword = 'BlockAttributeKeyword',
@@ -21,6 +22,8 @@ export enum TokenType {
 
 	ExpressionStart = 'ExpressionStart',
 	ExpressionEnd = 'ExpressionEnd',
+	// ExpressionStartEscape = 'ExpressionStartEscape',
+	// ExpressionEndEscape = 'ExpressionEndEscape',
 	PrintExpressionStart = 'PrintExpressionStart',
 	CommentExpressionStart = 'CommentExpressionStart',
 

@@ -1,8 +1,8 @@
-import { JSPrintStatement } from '../js-types';
+import { JSStatement } from '../js-types';
 import { Node } from './node';
 
 export class PrintExpressionNode extends Node {
 
-	public statement: JSPrintStatement = null;
+	public statement: JSStatement = null;
 
 }

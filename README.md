@@ -8,7 +8,7 @@ npm install hexel-view
 ## TODO
 - Rename `BlockValue` for Parser
 - Split expression into two types: Output and non-output
-- Add `@extend` support
+- Add `@layout` support
 - Write tests
 
 ## Bugs

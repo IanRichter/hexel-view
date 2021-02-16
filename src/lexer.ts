@@ -1,64 +1,71 @@
+import { WHITESPACE_CHARS } from './constants';
 import { ExpressionTags } from './expression-tags';
-import { ParseError } from './parse-error';
-import { Position } from './position';
+import { Source } from './source';
 import { Token } from './token';
 import { TokenType } from './token-type';
 
+const LETTERS_REGEX: RegExp = /[a-zA-Z]+/;
+const NUMBERS_REGEX: RegExp = /[0-9]+/;
+const TAG_NAME_START_REGEX: RegExp = /[a-zA-Z0-9]/;
+const ATTRIBUTE_KEYWORD_START_REGEX: RegExp = /[a-zA-Z0-9]/;
+
+const ATTRIBUTE_KEYWORD_TERMINATING_CHARS: string[] = ['/', '>', '=', '"', '\'', ...WHITESPACE_CHARS];
+const TAGNAME_TERMINATING_CHARS: string[] = ['/', '>', ...WHITESPACE_CHARS];
+
+const KEYWORDS_MAP = {
+	'in': TokenType.InKeyword
+};
+const ATTRIBUTE_KEYWORDS_MAP = {
+	'block': TokenType.BlockAttributeKeyword,
+	'context': TokenType.ContextAttributeKeyword
+};
+const BLOCK_KEYWORD_MAP = {
+	'print': TokenType.Print,
+	'if': TokenType.If,
+	'else-if': TokenType.ElseIf,
+	'else': TokenType.Else,
+	'switch': TokenType.Switch,
+	'case': TokenType.Case,
+	'default': TokenType.DefaultCase,
+	'foreach': TokenType.Foreach,
+	'while': TokenType.While,
+	'render': TokenType.Render,
+	'layout': TokenType.Layout,
+	'render-content': TokenType.RenderContent,
+	'content-for': TokenType.ContentFor
+};
+
+/**
+ * TODO: Split into an HTMLLexer and JSLexer, and let each only create tokens for that language, from a single TokenType
+ */
+
+/**
+ * Consumes characters from a Source and produces Tokens.
+ */
 export class Lexer {
 
-	private inputString: string;
-	private inputCursor: number = 0;
-	private lineNumber: number = 1;
-	private columnNumber: number = 1;
-	private tokenBuffer: Token = null;
+	private source: Source;
+	private tags: ExpressionTags;
 
-	public readonly tags: ExpressionTags;
-
-	// ========================================================================
-
-	public constructor(inputString: string, tags: ExpressionTags) {
-		this.inputString = inputString.replace(/\r\n/g, '\n');
-		this.tags = Object.freeze(tags);
+	public constructor(source: Source, tags: ExpressionTags) {
+		this.source = source;
+		this.tags = tags;
 	}
 
-	public consumeRawUntilMatches(matchChar: string): string {
-		return this.consumeUntilMatches(matchChar);
-	}
-
-	public consumeToken(): Token {
-		let token = this.getToken();
-		this.tokenBuffer = null;
-		return token;
-	}
-
-	public getToken(): Token {
-		if (!this.tokenBuffer) {
-			this.tokenBuffer = this.parseToken();
+	public parseToken(): Token {
+		if (this.source.isEOF()) {
+			return this.createToken(TokenType.EndOfFile);
 		}
 
-		return this.tokenBuffer;
-	}
-
-	public getPosition(): Position {
-		return new Position(this.lineNumber, this.columnNumber);
-	}
-
-	// ========================================================================
-
-	private parseToken(): Token {
-		if (this.isEOF()) {
-			return null;
-		}
-
-		if (this.matchesSubstring(this.tags.expressionStart)) {
+		if (this.source.matchesSubstring(this.tags.expressionStart)) {
 			return this.getExpressionStartToken();
 		}
 
-		if (this.matchesSubstring(this.tags.expressionEnd)) {
+		if (this.source.matchesSubstring(this.tags.expressionEnd)) {
 			return this.getExpressionEndToken();
 		}
 
-		switch (this.peek()) {
+		switch (this.source.peek()) {
 			case '<':
 				return this.getLeftAngleBraceOrMoreToken();
 			case '>':
@@ -97,15 +104,15 @@ export class Lexer {
 				return this.getCharAsToken(TokenType.Backtick);
 		}
 
-		if (this.matchesOneOf(WHITESPACE_CHARS)) {
+		if (this.source.matchesOneOf(WHITESPACE_CHARS)) {
 			return this.getWhitespaceToken();
 		}
 
-		if (this.matchesRegex(LETTERS_REGEX)) {
+		if (this.source.matchesRegex(LETTERS_REGEX)) {
 			return this.getLetters();
 		}
 
-		if (this.matchesRegex(NUMBERS_REGEX)) {
+		if (this.source.matchesRegex(NUMBERS_REGEX)) {
 			return this.getNumbers();
 		}
 
@@ -113,42 +120,53 @@ export class Lexer {
 	}
 
 	private getExpressionStartToken(): Token {
-		if (this.matchesSubstring(this.tags.commentStart)) {
-			let token = this.createToken(TokenType.CommentExpressionStart);
-			token.symbol += this.expectSubstring(this.tags.commentStart);
-			return token;
-		}
+		// if (this.source.matchesSubstring(this.tags.expressionStartEscape)) {
+		// 	let token = this.createToken(TokenType.ExpressionStartEscape);
+		// 	token.symbol += this.source.expectSubstring(this.delimiters.expressionStartEscape);
+		// 	token.value = this.delimiters.expressionStart;
+		// 	return token;
+		// }
 
-		if (this.matchesSubstring(this.tags.printStart)) {
-			let token = this.createToken(TokenType.PrintExpressionStart);
-			token.symbol += this.expectSubstring(this.tags.printStart);
+		if (this.source.matchesSubstring(this.tags.commentStart)) {
+			let token = this.createToken(TokenType.CommentExpressionStart);
+			token.symbol += this.source.expectSubstring(this.tags.commentStart);
 			return token;
 		}
 
 		let token = this.createToken(TokenType.ExpressionStart);
-		token.symbol += this.expectSubstring(this.tags.expressionStart);
+		token.symbol += this.source.expectSubstring(this.tags.expressionStart);
 		return token;
 	}
 
+	/**
+	 * @returns {Token}
+	 */
 	private getExpressionEndToken(): Token {
+		// if (this.source.matchesSubstring(this.delimiters.expressionEndEscape)) {
+		// 	let token = this.createToken(TokenType.ExpressionEndEscape);
+		// 	token.symbol += this.source.expectSubstring(this.delimiters.expressionEndEscape);
+		// 	token.value = this.delimiters.expressionEnd;
+		// 	return token;
+		// }
+
 		let token = this.createToken(TokenType.ExpressionEnd);
-		token.symbol += this.expectSubstring(this.tags.expressionEnd);
+		token.symbol += this.source.expectSubstring(this.tags.expressionEnd);
 		return token;
 	}
 
 	private getLeftAngleBraceOrMoreToken(): Token {
 		let token = this.createToken(TokenType.LeftAngleBrace);
-		token.symbol += this.expect('<');
+		token.symbol += this.source.expect('<');
 
-		if (this.matches('/')) {
+		if (this.source.matches('/')) {
 			return this.getClosingTagToken(token);
 		}
 
-		if (this.matches('!')) {
+		if (this.source.matches('!')) {
 			return this.getSpecialTagToken(token);
 		}
 
-		if (TAG_NAME_START_REGEX.test(this.peek())) {
+		if (TAG_NAME_START_REGEX.test(this.source.peek())) {
 			return this.getElementStartOrBlockToken(token);
 		}
 
@@ -156,7 +174,7 @@ export class Lexer {
 	}
 
 	private getClosingTagToken(token: Token): Token {
-		token.symbol += this.expect('/');
+		token.symbol += this.source.expect('/');
 
 		let tagName = this.getTagName();
 		if (!tagName) {
@@ -178,25 +196,25 @@ export class Lexer {
 	}
 
 	private getSpecialTagToken(token: Token): Token {
-		token.symbol += this.expect('!');
+		token.symbol += this.source.expect('!');
 
-		if (this.matchesSubstring('--')) {
+		if (this.source.matchesSubstring('--')) {
 			token.type = TokenType.CommentStart;
-			token.symbol += this.expectSubstring('--');
+			token.symbol += this.source.expectSubstring('--');
 			return token;
 		}
 
-		// TODO: Change this to be case insensitive matching
-		if (this.matchesSubstring('[CDATA[')) {
+		// TODO: Change to be a case insensitive match
+		if (this.source.matchesSubstring('[CDATA[')) {
 			token.type = TokenType.CDataStart;
-			token.symbol += this.expectSubstring('[CDATA[');
+			token.symbol += this.source.expectSubstring('[CDATA[');
 			return token;
 		}
 
-		// TODO: Change this to be case insensitive matching
-		if (this.matchesSubstring('DOCTYPE')) {
+		// TODO: Change to be a case insensitive match
+		if (this.source.matchesSubstring('DOCTYPE')) {
 			token.type = TokenType.Doctype;
-			token.symbol += this.expectSubstring('DOCTYPE');
+			token.symbol += this.source.expectSubstring('DOCTYPE');
 			return token;
 		}
 
@@ -218,12 +236,12 @@ export class Lexer {
 	}
 
 	private getBlockToken(token: Token): Token {
-		token.symbol += this.consumeOptionalWhitespace();
+		token.symbol += this.source.consumeOptionalWhitespace();
 
-		if (this.matches('@')) {
-			token.symbol += this.expect('@');
+		if (this.source.matches('@')) {
+			token.symbol += this.source.expect('@');
 
-			let keyword = this.consumeUntilMatchesOneOf(ATTRIBUTE_KEYWORD_TERMINATING_CHARS);
+			let keyword = this.source.consumeUntilMatchesOneOf(ATTRIBUTE_KEYWORD_TERMINATING_CHARS);
 			token.symbol += keyword;
 
 			if (keyword in BLOCK_KEYWORD_MAP) {
@@ -231,6 +249,7 @@ export class Lexer {
 				return token;
 			}
 
+			// TODO: Once lexer is split for HTML and JS, throw an error for this instead.
 			token.type = TokenType.Unknown;
 			return token;
 		}
@@ -241,11 +260,11 @@ export class Lexer {
 
 	private getRightSquareBraceOrMoreToken(): Token {
 		let token = this.createToken(TokenType.RightSquareBrace);
-		token.symbol += this.expect(']');
+		token.symbol += this.source.expect(']');
 
-		if (this.matchesSubstring(']>')) {
+		if (this.source.matchesSubstring(']>')) {
 			token.type = TokenType.CDataEnd;
-			token.symbol += this.expectSubstring(']>');
+			token.symbol += this.source.expectSubstring(']>');
 			return token;
 		}
 
@@ -254,14 +273,15 @@ export class Lexer {
 
 	private getAttributekKeywordToken(): Token {
 		let token = this.createToken();
-		token.symbol += this.expect('@');
+		token.symbol += this.source.expect('@');
 
-		if (!ATTRIBUTE_KEYWORD_START_REGEX.test(this.peek())) {
+		if (!ATTRIBUTE_KEYWORD_START_REGEX.test(this.source.peek())) {
 			token.type = TokenType.At;
 			return token;
 		}
 
-		let keyword = this.consumeUntilMatchesOneOf(ATTRIBUTE_KEYWORD_TERMINATING_CHARS);
+		let keyword = this.source.consumeUntilMatchesOneOf(ATTRIBUTE_KEYWORD_TERMINATING_CHARS);
+		token.properties.set('keyword', keyword);
 		token.symbol += keyword;
 
 		if (keyword in ATTRIBUTE_KEYWORDS_MAP) {
@@ -275,34 +295,34 @@ export class Lexer {
 
 	private getDashOrMoreToken(): Token {
 		let token = this.createToken();
-		token.symbol += this.expect('-');
+		token.symbol += this.source.expect('-');
 
-		if (!this.matches('-')) {
+		if (!this.source.matches('-')) {
 			token.type = TokenType.Dash;
 			return token;
 		}
 
-		token.symbol += this.expect('-');
+		token.symbol += this.source.expect('-');
 
-		if (!this.matches('>')) {
+		if (!this.source.matches('>')) {
 			token.type = TokenType.DoubleDash;
 			return token;
 		}
 
 		token.type = TokenType.CommentEnd;
-		token.symbol += this.expect('>');
+		token.symbol += this.source.expect('>');
 		return token;
 	}
 
 	private getWhitespaceToken(): Token {
 		let token = this.createToken(TokenType.Whitespace);
-		token.symbol += this.expectWhitespace();
+		token.symbol += this.source.expectWhitespace();
 		return token;
 	}
 
 	private getLetters(): Token {
 		let token = this.createToken(TokenType.Letters);
-		token.symbol += this.consumeRegex(LETTERS_REGEX);
+		token.symbol += this.source.consumeRegex(LETTERS_REGEX);
 
 		if (token.symbol in KEYWORDS_MAP) {
 			token.type = KEYWORDS_MAP[token.symbol];
@@ -313,201 +333,26 @@ export class Lexer {
 
 	private getNumbers(): Token {
 		let token = this.createToken(TokenType.Numbers);
-		token.symbol += this.consumeRegex(NUMBERS_REGEX);
+		token.symbol += this.source.consumeRegex(NUMBERS_REGEX);
 		return token;
 	}
 
 	private getTagName(): string {
-		if (!TAG_NAME_START_REGEX.test(this.peek())) {
+		if (!TAG_NAME_START_REGEX.test(this.source.peek())) {
 			return null;
 		}
 
-		return this.consumeUntilMatchesOneOf(TAGNAME_TERMINATING_CHARS).toLowerCase();
+		return this.source.consumeUntilMatchesOneOf(TAGNAME_TERMINATING_CHARS).toLowerCase();
 	}
 
-	// ========================================================================
-
 	private createToken(type: TokenType = null): Token {
-		return new Token(type, this.getPosition(), '');
+		return new Token(type, this.source.getPosition(), '');
 	}
 
 	private getCharAsToken(tokenType: TokenType): Token {
 		let token = this.createToken(tokenType);
-		token.symbol += this.consume();
+		token.symbol += this.source.consume();
 		return token;
 	}
 
-	private isEOF(): boolean {
-		return this.inputCursor >= this.inputString.length;
-	}
-
-	private peek(): string {
-		if (this.isEOF()) {
-			return null;
-		}
-
-		return this.inputString[this.inputCursor];
-	}
-
-	private matches(char: string): boolean {
-		return this.peek() === char;
-	}
-
-	private matchesOneOf(chars: string[]): boolean {
-		return chars.some(char => this.matches(char));
-	}
-
-	private matchesSubstring(substring: string): boolean {
-		if (this.inputCursor + substring.length > this.inputString.length) {
-			return false;
-		}
-
-		for (let i = 0; i < substring.length; i++) {
-			if (substring[i] !== this.inputString[this.inputCursor + i]) {
-				return false;
-			}
-		}
-
-		return true;
-	}
-
-	public matchesRegex(regex: RegExp): boolean {
-		regex = new RegExp(regex, 'y');
-		regex.lastIndex = this.inputCursor;
-		return regex.test(this.inputString);
-	}
-
-	private consume(): string {
-		if (this.isEOF()) {
-			throw new ParseError('Unexpected end of file.', this.getPosition());
-		}
-
-		let char = this.inputString[this.inputCursor];
-		this.inputCursor++;
-
-		if (char === '\n') {
-			this.lineNumber++;
-			this.columnNumber = 1;
-		}
-		else {
-			this.columnNumber++;
-		}
-
-		return char;
-	}
-
-	private consumeUntilMatches(matchChar: string): string {
-		let chars = '';
-		while (!this.matches(matchChar)) {
-			chars += this.consume();
-		}
-		return chars;
-	}
-
-	private consumeUntilMatchesOneOf(matchChars: string[]): string {
-		let chars = '';
-		while (!this.matchesOneOf(matchChars)) {
-			chars += this.consume();
-		}
-		return chars;
-	}
-
-	private consumeOptionalWhitespace(): string {
-		let chars = '';
-		while (this.matchesOneOf(WHITESPACE_CHARS)) {
-			chars += this.consume();
-		}
-		return chars;
-	}
-
-	private expect(char: string): string {
-		if (!this.matches(char)) {
-			throw new ParseError('Encountered unexpected character.', this.getPosition());
-		}
-
-		return this.consume();
-	}
-
-	private expectOneOf(chars: string[]): string {
-		if (!this.matchesOneOf(chars)) {
-			throw new ParseError('Encountered unexpected character.', this.getPosition());
-		}
-
-		return this.consume();
-	}
-
-	private expectSubstring(substring: string): string {
-		for (let i = 0; i < substring.length; i++) {
-			if (substring[i] !== this.inputString[this.inputCursor + i]) {
-				let position = this.getPosition();
-				position.column += i;
-				throw new ParseError('Encountered unexpected character.', position);
-			}
-		}
-
-		this.inputCursor += substring.length;
-		this.columnNumber += substring.length;
-		return substring;
-	}
-
-	private consumeRegex(regex: RegExp): string {
-		regex = new RegExp(regex, 'y');
-		regex.lastIndex = this.inputCursor;
-		let match = regex.exec(this.inputString);
-
-		if (!match) {
-			return null;
-		}
-
-		let chars = match[0];
-		this.inputCursor += chars.length;
-		this.columnNumber += chars.length;
-		return chars;
-	}
-
-	private expectWhitespace(): string {
-		let chars = '';
-		while (this.matchesOneOf(WHITESPACE_CHARS)) {
-			chars += this.consume();
-		}
-
-		if (chars.length === 0) {
-			throw new ParseError('Expected one or more whitespace characters.', this.getPosition());
-		}
-
-		return chars;
-	}
-
 }
-
-const LETTERS_REGEX: RegExp = /[a-zA-Z]+/;
-const NUMBERS_REGEX: RegExp = /[0-9]+/;
-const TAG_NAME_START_REGEX: RegExp = /[a-zA-Z0-9]/;
-const ATTRIBUTE_KEYWORD_START_REGEX: RegExp = /[a-zA-Z0-9]/;
-
-const WHITESPACE_CHARS: string[] = [' ', '\t', '\n'];
-const ATTRIBUTE_KEYWORD_TERMINATING_CHARS: string[] = ['/', '>', '=', '"', '\'', ...WHITESPACE_CHARS];
-const TAGNAME_TERMINATING_CHARS: string[] = ['/', '>', ...WHITESPACE_CHARS];
-
-const KEYWORDS_MAP = {
-	'in': TokenType.InKeyword
-};
-const ATTRIBUTE_KEYWORDS_MAP = {
-	'block': TokenType.BlockAttributeKeyword,
-	'context': TokenType.ContextAttributeKeyword
-};
-const BLOCK_KEYWORD_MAP = {
-	'print': TokenType.Print,
-	'if': TokenType.If,
-	'else-if': TokenType.ElseIf,
-	'else': TokenType.Else,
-	'switch': TokenType.Switch,
-	'case': TokenType.Case,
-	'default': TokenType.DefaultCase,
-	'foreach': TokenType.Foreach,
-	'while': TokenType.While,
-	'render': TokenType.Render,
-	'render-default-slot': TokenType.RenderDefaultSlot,
-	'render-slot': TokenType.RenderSlot,
-	'content-for': TokenType.ContentFor
-};
