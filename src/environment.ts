@@ -11,6 +11,7 @@ import { ExpressionTags } from './expression-tags';
 export interface EnvironmentOptions {
 	rootViewsPath: string;
 	cacheViews: boolean;
+	writeGeneratedViews: boolean;
 	tags: ExpressionTags;
 }
 
@@ -18,6 +19,7 @@ export class Environment {
 
 	private rootViewsPath: string;
 	private cacheViews: boolean;
+	private writeGeneratedViews: boolean;
 	private viewCache: Map<string, View>;
 	private viewSourcemaps: object;
 	private tags: ExpressionTags;
@@ -25,16 +27,18 @@ export class Environment {
 	public constructor({
 		rootViewsPath,
 		cacheViews,
+		writeGeneratedViews,
 		tags
 	}: EnvironmentOptions) {
 		this.rootViewsPath = rootViewsPath;
 		this.cacheViews = cacheViews;
 		this.viewCache = new Map();
+		this.writeGeneratedViews = writeGeneratedViews;
 		this.viewSourcemaps = {};
 		this.tags = tags;
 	}
 
-	private verifyViewPath(relativeViewPath: string): string {
+	public verifyViewPath(relativeViewPath: string): string {
 		let absoluteViewPath = path.join(this.rootViewsPath, relativeViewPath);
 
 		if (!fs.existsSync(absoluteViewPath)) {
@@ -69,6 +73,11 @@ export class Environment {
 
 		let compiler = new Compiler();
 		let view = compiler.compile(viewNode, this.viewSourcemaps);
+
+		if (this.writeGeneratedViews) {
+			let generatedCodePath = path.join(source.filePath, '.gen.js');
+			fs.writeFileSync(generatedCodePath, view.code, { encoding: 'utf-8' });
+		}
 
 		return view;
 	}

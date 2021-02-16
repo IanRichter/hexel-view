@@ -4,11 +4,11 @@ import { WHITESPACE_CHARS } from './constants';
 
 export class Source {
 
-	private sourceString: string;
+	public readonly sourceString: string;
+	public readonly filePath: string;
 	private sourceCursor: number = 0;
 	private lineNumber: number = 1;
 	private columnNumber: number = 1;
-	private filePath: string;
 
 	// TODO: Default to fake path for library (maybe generate UUID for .html file) (needed for sourcemaps)
 	public constructor(sourceString: string, filePath: string = '') {

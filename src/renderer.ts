@@ -2,6 +2,8 @@ import { Express } from 'express';
 import { RendererOptions } from './renderer-options';
 import { ExpressionTags } from './expression-tags';
 import { Environment } from './environment';
+import { Runtime } from './runtime';
+import { Source } from './source';
 
 /**
  * Pipeline:
@@ -18,6 +20,7 @@ import { Environment } from './environment';
 	public constructor({
 		views = './views',
 		cache = true,
+		writeGeneratedViews = false,
 		tags = {
 			blockTagName: 'js',
 			expressionStart: '{%',
@@ -31,6 +34,7 @@ import { Environment } from './environment';
 		this.environment = new Environment({
 			rootViewsPath: views,
 			cacheViews: cache,
+			writeGeneratedViews,
 			tags
 		});
 	}
@@ -46,7 +50,7 @@ import { Environment } from './environment';
 		expressApp.set('view engine', fileExtension);
 	}
 
-	public async render(relativeViewPath: string, context: object = {}, layoutViewPath: never = null): Promise<string> {
+	public async render(relativeViewPath: string, context: object = {}, layoutViewPath: string = null): Promise<string> {
 		let view = this.environment.getView(relativeViewPath);
 		let runtime = new Runtime(this.environment);
 		await view.render(runtime, context, layoutViewPath);

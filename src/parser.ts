@@ -31,7 +31,7 @@ import { NormalAttributeNode } from './nodes/normal-attribute-node';
 import { AppendAttributeNode } from './nodes/append-attribute-node';
 import { WhitespaceNode } from './nodes/whitespace-node';
 import { TextNode } from './nodes/text-node';
-import { JSValueExpression, JSStatement } from './js-types';
+import { JSValueExpression, JSExpressionStatement, JSPrintStatement } from './js-types';
 import { PrintExpressionNode } from './nodes/print-expression-node';
 import { ATTRIBUTE_NAME_TERMINATING_TOKENS, HTML_QUOTE_TOKENS, INVALID_TEXT_TOKENS, NORMAL_ATTRIBUTE_STRING_TERMINATING_TOKENS, VARIABLE_NAME_START_TOKENS, VARIABLE_NAME_VALID_TOKENS } from './token-constants';
 import { ViewNode } from './nodes/view-node';
@@ -661,6 +661,7 @@ export class Parser {
 			this.expect(TokenType.RightAngleBrace);
 		}
 		else {
+			node.hasBlock = true;
 			this.expect(TokenType.RightAngleBrace);
 			node.childNodes = this.parseNodesUntilMatches(TokenType.BlockClosingStart);
 			this.parseBlockClosingNode();
@@ -690,7 +691,7 @@ export class Parser {
 	private parseExpressionNode(): ExpressionNode {
 		let node = new ExpressionNode(this.getPosition());
 		this.expect(TokenType.ExpressionStart);
-		node.statement = this.parseJSStatement(this.parseValueNode(TokenType.ExpressionEnd));
+		node.statement = this.parseJSExpressionStatement(this.parseValueNode(TokenType.ExpressionEnd));
 		this.expect(TokenType.ExpressionEnd);
 		return node;
 	}
@@ -698,7 +699,7 @@ export class Parser {
 	private parsePrintExpressionNode(): PrintExpressionNode {
 		let node = new PrintExpressionNode(this.getPosition());
 		this.expect(TokenType.ExpressionStart);
-		node.statement = this.parseJSStatement(this.parseValueNode(TokenType.ExpressionEnd));
+		node.statement = this.parseJSPrintStatement(this.parseValueNode(TokenType.ExpressionEnd));
 		this.expect(TokenType.ExpressionEnd);
 		return node;
 	}
@@ -738,7 +739,21 @@ export class Parser {
 		return this.overrideJSNodePosition(expressionNode, valueNode.position) as JSValueExpression;
 	}
 
-	private parseJSStatement(valueNode: ValueNode): JSStatement {
+	private parseJSExpressionStatement(valueNode: ValueNode): JSExpressionStatement {
+		return this.parseJSStatement(valueNode) as JSExpressionStatement;
+	}
+
+	private parseJSPrintStatement(valueNode: ValueNode): JSPrintStatement {
+		let statement = this.parseJSStatement(valueNode);
+
+		if (Types.isVariableDeclaration(statement)) {
+			throw new ParseError(`Variable declarations are not allowed in this context.`, valueNode.position);
+		}
+
+		return statement as JSPrintStatement;
+	}
+
+	private parseJSStatement(valueNode: ValueNode): Types.Node {
 		let result = parse(valueNode.value, {
 			sourceType: 'script',
 			strictMode: true,
@@ -759,7 +774,7 @@ export class Parser {
 			throw new ParseError(`Variable declarations are only supported for the 'let' keyword.`, valueNode.position);
 		}
 
-		return this.overrideJSNodePosition(statement, valueNode.position) as JSStatement;
+		return this.overrideJSNodePosition(statement, valueNode.position);
 	}
 
 	private overrideJSNodePosition(node: Types.Node, position: Position): Types.Node {

@@ -1,19 +1,39 @@
-import { TemplateNode } from './nodes/template-node';
+import { Runtime } from './runtime';
+import { Source } from './source';
 
+export type RenderFunction = (context: object, runtime: Runtime) => string;
+
+/**
+ * Represents a compiled view template that can be rendered.
+ */
 export class View {
 
-	public readonly ast: TemplateNode;
+	private filePath: string;
+	private renderFunction: RenderFunction;
+	private source: Source;
 	public readonly code: string;
-	private renderFunction: () => string;
 
-	public constructor(ast: TemplateNode, code: string, renderFunction: () => string) {
-		this.ast = ast;
+	public constructor(filePath: string, renderFunction: RenderFunction, source: Source, code: string) {
+		this.filePath = filePath;
+		this.renderFunction = renderFunction;
+		this.source = source;
 		this.code = code;
-		this.renderFunction = this.renderFunction;
 	}
 
-	public render(context: object): string {
-		return '';
+	public async render(runtime: Runtime, context: object, layoutViewPath: string = null): Promise<void> {
+		if (layoutViewPath) {
+			runtime.setLayout(layoutViewPath);
+		}
+
+		await this.renderFunction.call(context, runtime, false);
+
+		if (runtime.hasLayout()) {
+			await runtime.renderLayout(context);
+		}
+	}
+
+	public async renderPartial(runtime: Runtime, context: object): Promise<void> {
+		await this.renderFunction.call(context, runtime, true);
 	}
 
 }

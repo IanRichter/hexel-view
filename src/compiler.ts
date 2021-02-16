@@ -1,109 +1,145 @@
 import generate  from '@babel/generator';
 import * as Types from '@babel/types';
 import Module from 'module';
-import { JSStatement, JSValueExpression } from './js-types';
 import { AppendAttributeNode } from './nodes/append-attribute-node';
-import { BooleanAttributeNode } from './nodes/boolean-attribute-node';
 import { CaseNode } from './nodes/case-node';
 import { CDataNode } from './nodes/cdata-node';
+import { CommentExpressionNode } from './nodes/comment-expression-node';
 import { CommentNode } from './nodes/comment-node';
+import { ConditionalAttributeNode } from './nodes/conditional-attribute-node';
 import { ContentForNode } from './nodes/content-for-node';
 import { DefaultCaseNode } from './nodes/default-case-node';
 import { DoctypeNode } from './nodes/doctype-node';
 import { ElementNode } from './nodes/element-node';
 import { ElseIfNode } from './nodes/else-if-node';
 import { ElseNode } from './nodes/else-node';
-import { CommentExpressionNode } from './nodes/comment-expression-node';
+import { ExpressionAttributeNode } from './nodes/expression-attribute-node';
 import { ExpressionNode } from './nodes/expression-node';
 import { ForeachNode } from './nodes/foreach-node';
 import { IfNode } from './nodes/if-node';
+import { LayoutNode } from './nodes/layout-node';
 import { Node } from './nodes/node';
 import { NormalAttributeNode } from './nodes/normal-attribute-node';
-import { BoundAttributeNode } from './nodes/bound-attribute-node';
+import { PrintExpressionNode } from './nodes/print-expression-node';
 import { PrintNode } from './nodes/print-node';
-import { RenderDefaultSlotNode } from './nodes/render-default-slot-node';
+import { RenderContentNode } from './nodes/render-content-node';
 import { RenderNode } from './nodes/render-node';
-import { RenderSlotNode } from './nodes/render-slot-node';
 import { ScopeNode } from './nodes/scope-node';
 import { SwitchNode } from './nodes/switch-node';
-import { TemplateNode } from './nodes/template-node';
 import { TextNode } from './nodes/text-node';
+import { ViewNode } from './nodes/view-node';
 import { WhileNode } from './nodes/while-node';
 import { WhitespaceNode } from './nodes/whitespace-node';
 import { Position } from './position';
 import { View } from './view';
-import { PrintExpressionNode } from './nodes/print-expression-node';
 
-interface CustomModule extends Module {
+interface ViewModule extends Module {
 	_compile(code: string, filename: string): void;
 }
 
-const SCOPE_IDENTIFIER = '__scope__';
-const RESOLVE_IDENTIFIER = '__resolve__';
-const REJECT_IDENTIFIER = '__reject__';
-const ERROR_IDENTIFIER = '__error__';
-const COLLECTION_IDENTIFIER = '__collection__';
+const MODULE_IDENTIFIER = '__module__';
+const REQUIRE_IDENTIFIER = '__require__';
+const RUNTIME_IDENTIFIER = '__runtime__';
+const PARTIAL_IDENTIFIER = '__isPartial__';
+const BLOCK_IDENTIFIER = '$block';
 
 /**
- * Nodes with async support:
- * - OutputExpressionNode
- *
  * Nodes with potential async support:
+ * - AttributeNodes
  * - IfNode
  * - ElseIfNode
  * - SwitchNode
  * - ForeachNode
  * - WhileNode
- * - AttributeNodes
+ * - ExpressionNode
  */
 
-// TODO: Fix source mapping
+// TODO: Figure out how to handle sourcemaps for views created from strings (fake path maybe?)
 /**
- * Compiles an Abstract Syntax Tree into a View.
+ * Compiles an Abstract Syntax Tree into a Render Function.
  */
 export class Compiler {
 
-	public compile(ast: TemplateNode): View {
-		try {
-			let transformedAst = this.compileTemplateNode(ast);
+	public compile(viewNode: ViewNode, viewSourcemaps: object): View {
+		// Build view module AST
+		let program = Types.program([
+			...this.createViewModuleHeaders(),
+			this.compileViewNode(viewNode)
+		]);
 
-			let { code } = generate(
-				transformedAst,
-				{
-					minified: false,
-					compact: false
-				}
-			);
+		// Generate view module code and sourcemap
+		let {
+			code: viewModuleCode,
+			map: viewModuleSourcemap
+		} = generate(
+			program,
+			{
+				compact: false,
+				concise: false,
+				sourceMaps: true,
+				sourceFileName: viewNode.source.filePath
+			},
+			viewNode.source.sourceString
+		);
 
-			let templateModule = new Module('') as CustomModule;
-			templateModule._compile(code, ast.filename);
-			let renderFunction = templateModule.exports;
+		// Append view module sourcemap to code
+		let base64Sourcemap = Buffer.from(JSON.stringify(viewModuleSourcemap)).toString('base64');
+		viewModuleCode += `\n\n//# sourceMappingURL=data:application/json;charset=utf8;base64,${base64Sourcemap}`;
 
-			return new View(ast, code, renderFunction);
-		}
-		catch (error) {
-			console.error(error);
-			throw new Error('Failed to compile template.');
-		}
+		// Compile view module
+		let viewModule = new Module(null) as ViewModule;
+		viewModule.paths = process.mainModule.paths;
+		viewModule._compile(viewModuleCode, viewNode.source.filePath);
+
+		// Inject view module sourcemap into exports
+		viewModule.exports.sourcemaps = viewSourcemaps;
+		viewSourcemaps[viewNode.source.filePath] = {
+			url: viewNode.source.filePath,
+			map: viewModuleSourcemap
+		};
+
+		// Create and configure view
+		let view = new View(
+			viewNode.source.filePath,
+			viewModule.exports.renderFunction,
+			viewNode.source,
+			viewModuleCode // TODO: Temporary; remove this
+		);
+
+		return view;
 	}
 
-	// ========================================================================
+	private compileViewNode(node: ViewNode): Types.Statement {
+		let bodyStatements = [];
 
-	private compileTemplateNode(node: TemplateNode): Types.Statement {
+		if (node.layoutNode) {
+			bodyStatements.push(
+				this.compileLayoutNode(node.layoutNode)
+			);
+		}
+
+		bodyStatements.push(
+			...this.compileNodes(node.childNodes)
+		);
+
 		return Types.expressionStatement(
 			Types.assignmentExpression(
 				'=',
 				Types.memberExpression(
-					Types.identifier('module'),
-					Types.identifier('exports')
+					Types.memberExpression(
+						Types.identifier(MODULE_IDENTIFIER),
+						Types.identifier('exports')
+					),
+					Types.identifier('renderFunction')
 				),
 				Types.functionExpression(
-					null,
+					Types.identifier('__RenderView__'),
 					[
-						Types.identifier(SCOPE_IDENTIFIER)
+						Types.identifier(RUNTIME_IDENTIFIER),
+						Types.identifier(PARTIAL_IDENTIFIER)
 					],
 					Types.blockStatement(
-						this.mapChildNodes(node.childNodes)
+						bodyStatements
 					),
 					false,
 					true
@@ -112,12 +148,47 @@ export class Compiler {
 		);
 	}
 
-	private compileNode(node: Node): Types.Statement | Types.VariableDeclaration[] {
+	private compileLayoutNode(node: LayoutNode): Types.Statement {
+		return Types.ifStatement(
+			Types.unaryExpression(
+				'!',
+				Types.identifier(PARTIAL_IDENTIFIER)
+			),
+			Types.blockStatement([
+				Types.expressionStatement(
+					this.createRuntimeCall('setLayout', node.position, [
+						Types.stringLiteral(node.value)
+					])
+				)
+			])
+		);
+	}
+
+	private compileNodes(nodes: Node[]): Types.Statement[] {
+		return nodes
+			.flatMap(node => this.compileNode(node))
+			.filter(statement => statement);
+	}
+
+	private compileNode(node: Node): Types.Statement | Types.Statement[] {
 		switch (node.constructor) {
+			// Standard HTML
+			case WhitespaceNode:
+				return this.compileWhitespaceNode(node as WhitespaceNode);
+			case TextNode:
+				return this.compileTextNode(node as TextNode);
+			case CommentNode:
+				return this.compileCommentNode(node as CommentNode);
+			case CDataNode:
+				return this.compileCDataNode(node as CDataNode);
+			case DoctypeNode:
+				return this.compileDoctypeNode(node as DoctypeNode);
+			case ElementNode:
+				return this.compileElementNode(node as ElementNode);
+
+			// Custom Syntax
 			case ScopeNode:
 				return this.compileScopeNode(node as ScopeNode);
-			case PrintNode:
-				return this.compilePrintNode(node as PrintNode);
 			case IfNode:
 				return this.compileIfNode(node as IfNode);
 			case SwitchNode:
@@ -128,106 +199,203 @@ export class Compiler {
 				return this.compileWhileNode(node as WhileNode);
 			case RenderNode:
 				return this.compileRenderNode(node as RenderNode);
-			case RenderDefaultSlotNode:
-				return this.compileRenderDefaultSlotNode(node as RenderDefaultSlotNode);
-			case RenderSlotNode:
-				return this.compileRenderSlotNode(node as RenderSlotNode);
+			case RenderContentNode:
+				return this.compileRenderContentNode(node as RenderContentNode);
 			case ContentForNode:
 				return this.compileContentForNode(node as ContentForNode);
+			case PrintNode:
+				return this.compilePrintNode(node as PrintNode);
 			case ExpressionNode:
 				return this.compileExpressionNode(node as ExpressionNode);
 			case PrintExpressionNode:
 				return this.compilePrintExpressionNode(node as PrintExpressionNode);
 			case CommentExpressionNode:
-				return null;
-			case CommentNode:
-				return this.compileCommentNode(node as CommentNode);
-			case CDataNode:
-				return this.compileCDataNode(node as CDataNode);
-			case DoctypeNode:
-				return this.compileDoctypeNode(node as DoctypeNode);
-			case ElementNode:
-				return this.compileElementNode(node as ElementNode);
-			case WhitespaceNode:
-				return this.compileWhitespaceNode(node as WhitespaceNode);
-			case TextNode:
-				return this.compileTextNode(node as TextNode);
+				return this.compileCommentExpressionNode(node as CommentExpressionNode);
+
 			default:
 				throw new Error('Failed to compile unknown node.');
 		}
 	}
 
-	private compileScopeNode(node: ScopeNode): Types.Statement {
-		return Types.blockStatement(
-			this.mapChildNodes(node.childNodes)
+	private compileWhitespaceNode(node: WhitespaceNode): Types.Statement {
+		return Types.expressionStatement(
+			this.createRuntimeCall('renderText', node.position, [
+				Types.stringLiteral(node.textContent)
+			])
 		);
 	}
 
-	private compilePrintNode(node: PrintNode): Types.Statement {
-		let expression = this.createWrapExpression(
-			node.expression,
-			node.position
+	private compileTextNode(node: TextNode): Types.Statement {
+		return Types.expressionStatement(
+			this.createRuntimeCall('renderText', node.position, [
+				Types.stringLiteral(node.textContent)
+			])
+		);
+	}
+
+	private compileCommentNode(node: CommentNode): Types.Statement {
+		return Types.expressionStatement(
+			this.createRuntimeCall('renderComment', node.position, [
+				Types.stringLiteral(node.textContent)
+			])
+		);
+	}
+
+	private compileCDataNode(node: CDataNode): Types.Statement {
+		return Types.expressionStatement(
+			this.createRuntimeCall('renderCData', node.position, [
+				Types.stringLiteral(node.textContent)
+			])
+		);
+	}
+
+	private compileDoctypeNode(node: DoctypeNode): Types.Statement {
+		return Types.expressionStatement(
+			this.createRuntimeCall('renderDoctype', node.position)
+		);
+	}
+
+	private compileElementNode(node: ElementNode): Types.Statement[] {
+		let statements = [];
+
+		let attributeExpressions = node.attributes.map(attributeNode => {
+			switch (attributeNode.constructor) {
+				case NormalAttributeNode:
+					return this.compileNormalAttributeNode(attributeNode as NormalAttributeNode);
+				case ExpressionAttributeNode:
+					return this.compileExpressionAttributeNode(attributeNode as ExpressionAttributeNode);
+				case ConditionalAttributeNode:
+					return this.compileConditionalAttributeNode(attributeNode as ConditionalAttributeNode);
+				case AppendAttributeNode:
+					return this.compileAppendAttributeNode(attributeNode as AppendAttributeNode);
+				default:
+					throw new Error('Encountered unsupported attribute node.');
+			}
+		});
+
+		statements.push(
+			Types.expressionStatement(
+				this.createRuntimeCall('renderElementOpenTag', node.position, [
+					Types.stringLiteral(node.tagName),
+					Types.arrayExpression(
+						attributeExpressions
+					)
+				])
+			)
 		);
 
-		let objectProperties = [
-			Types.objectProperty(
-				Types.identifier('expression'),
-				expression
-			)
-		];
+		if (node.isVoid) {
+			return statements;
+		}
 
-		if (node.hasBlock) {
-			expression.params.push(
-				Types.identifier('$block')
-			);
-
-			objectProperties.push(
-				Types.objectProperty(
-					Types.identifier('body'),
-					Types.arrowFunctionExpression(
-						node.blockArgs.map(blockArg => Types.identifier(blockArg)),
-						Types.blockStatement(
-							this.mapChildNodes(node.childNodes)
-						),
-						true
-					)
-				)
+		if (!node.isSelfClosing) {
+			statements.push(
+				...this.compileNodes(node.childNodes)
 			);
 		}
 
-		return Types.expressionStatement(
-			Types.awaitExpression(
-				this.createScopeCall('renderPrint', node.position, [
-					Types.objectExpression(objectProperties)
+		statements.push(
+			Types.expressionStatement(
+				this.createRuntimeCall('renderElementCloseTag', node.position, [
+					Types.stringLiteral(node.tagName)
 				])
 			)
+		);
+
+		return statements;
+	}
+
+	private compileNormalAttributeNode(node: NormalAttributeNode): Types.CallExpression {
+		let quoteExpression;
+		if (node.quote) {
+			quoteExpression = Types.stringLiteral(node.quote.symbol);
+		}
+		else {
+			quoteExpression = Types.nullLiteral();
+		}
+
+		let valuesExpression;
+		if (node.values) {
+			valuesExpression = Types.arrayExpression(
+				node.values.map(value => {
+					if (typeof value === 'string') {
+						return Types.stringLiteral(value);
+					}
+					else {
+						return value;
+					}
+				})
+			);
+		}
+		else {
+			valuesExpression = Types.nullLiteral();
+		}
+
+		return this.createRuntimeCall('createNormalAttribute', node.position, [
+			Types.stringLiteral(node.name),
+			quoteExpression,
+			valuesExpression
+		]);
+	}
+
+	private compileExpressionAttributeNode(node: ExpressionAttributeNode): Types.CallExpression {
+		return this.createRuntimeCall('createExpressionAttribute', node.position, [
+			Types.stringLiteral(node.name),
+			Types.stringLiteral(node.quote.symbol),
+			node.expression
+		]);
+	}
+
+	private compileConditionalAttributeNode(node: ConditionalAttributeNode): Types.CallExpression {
+		return this.createRuntimeCall('createConditionalAttribute', node.position, [
+			Types.stringLiteral(node.name),
+			node.condition
+		]);
+	}
+
+	private compileAppendAttributeNode(node: AppendAttributeNode): Types.CallExpression {
+		return this.createRuntimeCall('createAppendAttribute', node.position, [
+			Types.stringLiteral(node.name),
+			Types.stringLiteral(node.quote.symbol),
+			Types.stringLiteral(node.value),
+			node.condition
+		]);
+	}
+
+	private compileScopeNode(node: ScopeNode): Types.Statement {
+		return Types.blockStatement(
+			this.compileNodes(node.childNodes)
 		);
 	}
 
 	private compileIfNode(node: IfNode | ElseIfNode): Types.Statement {
 		let alternateStatement = null;
 		if (node.alternateNode instanceof ElseIfNode) {
-			alternateStatement = this.compileIfNode(node.alternateNode);
+			alternateStatement = this.compileElseIfNode(node.alternateNode);
 		}
 		else if (node.alternateNode instanceof ElseNode) {
 			alternateStatement = this.compileElseNode(node.alternateNode);
 		}
 
-		return Types.ifStatement(
-			this.cloneExpressionAtPosition(
+		return this.setNodePosition(
+			node.position,
+			Types.ifStatement(
 				node.condition,
-				node.position
-			),
-			Types.blockStatement(
-				this.mapChildNodes(node.childNodes)
-			),
-			alternateStatement
+				Types.blockStatement(
+					this.compileNodes(node.childNodes)
+				),
+				alternateStatement
+			)
 		);
+	}
+
+	private compileElseIfNode(node: ElseIfNode): Types.Statement {
+		return this.compileIfNode(node);
 	}
 
 	private compileElseNode(node: ElseNode): Types.Statement {
 		return Types.blockStatement(
-			this.mapChildNodes(node.childNodes)
+			this.compileNodes(node.childNodes)
 		);
 	}
 
@@ -237,105 +405,82 @@ export class Compiler {
 			cases.push(this.compileDefaultCaseNode(node.defaultCase));
 		}
 
-		return Types.switchStatement(
-			this.cloneExpressionAtPosition(
+		return this.setNodePosition(
+			node.position,
+			Types.switchStatement(
 				node.expression,
-				node.position
-			),
-			cases
+				cases
+			)
 		);
 	}
 
 	private compileCaseNode(node: CaseNode): Types.SwitchCase {
-		return Types.switchCase(
-			this.cloneExpressionAtPosition(
+		return this.setNodePosition(
+			node.position,
+			Types.switchCase(
 				node.expression,
-				node.position
-			),
-			[
-				Types.blockStatement(
-					this.mapChildNodes(node.childNodes)
-				),
-				Types.breakStatement()
-			]
+				[
+					Types.blockStatement(
+						this.compileNodes(node.childNodes)
+					),
+					Types.breakStatement()
+				]
+			)
 		);
 	}
 
 	private compileDefaultCaseNode(node: DefaultCaseNode): Types.SwitchCase {
-		return Types.switchCase(
-			null,
-			[
-				Types.blockStatement(
-					this.mapChildNodes(node.childNodes)
-				),
-				Types.breakStatement()
-			]
+		return this.setNodePosition(
+			node.position,
+			Types.switchCase(
+				null,
+				[
+					Types.blockStatement(
+						this.compileNodes(node.childNodes)
+					),
+					Types.breakStatement()
+				]
+			)
 		);
 	}
 
 	private compileForeachNode(node: ForeachNode): Types.Statement {
-		let collectionDeclaration = Types.variableDeclaration(
-			'const',
-			[
-				Types.variableDeclarator(
-					Types.identifier(COLLECTION_IDENTIFIER),
-					this.createScopeCall('collection', node.position, [
-						this.createWrapExpression(
-							node.collection,
-							node.position
-						)
-					])
-				)
-			]
-		);
-
-		let loopConditional = Types.ifStatement(
-			Types.callExpression(
-				Types.memberExpression(
-					Types.identifier(COLLECTION_IDENTIFIER),
-					Types.identifier('hasAny')
-				),
-				[]
-			),
-			Types.blockStatement([
-				Types.forOfStatement(
-					Types.variableDeclaration(
-						'let',
-						[
-							Types.variableDeclarator(
-								Types.arrayPattern(
-									node.identifiers.map(identifier => Types.identifier(identifier))
-								)
+		return this.setNodePosition(
+			node.position,
+			Types.forOfStatement(
+				Types.variableDeclaration(
+					'let',
+					[
+						Types.variableDeclarator(
+							Types.arrayPattern(
+								node.identifiers.map(identifier => {
+									return this.setNodePosition(
+										identifier.position,
+										Types.identifier(identifier.value)
+									);
+								})
 							)
-						]
-					),
-					Types.identifier(COLLECTION_IDENTIFIER),
-					Types.blockStatement(
-						this.mapChildNodes(node.childNodes)
-					)
+						)
+					]
+				),
+				this.createRuntimeCall('createCollection', node.position, [
+					node.collection
+				]),
+				Types.blockStatement(
+					this.compileNodes(node.childNodes)
 				)
-			]),
-
+			)
 		);
-
-		if (node.alternateNode) {
-			loopConditional.alternate = this.compileElseNode(node.alternateNode);
-		}
-
-		return Types.blockStatement([
-			collectionDeclaration,
-			loopConditional
-		]);
 	}
 
 	private compileWhileNode(node: WhileNode): Types.Statement {
-		return Types.whileStatement(
-			this.cloneExpressionAtPosition(
+		return this.setNodePosition(
+			node.position,
+			Types.whileStatement(
 				node.condition,
-				node.position
-			),
-			Types.blockStatement(
-				this.mapChildNodes(node.childNodes)
+				Types.blockStatement(
+					this.compileNodes(node.childNodes)
+				)
 			)
 		);
 	}
@@ -343,380 +488,223 @@ export class Compiler {
 	private compileRenderNode(node: RenderNode): Types.Statement {
 		return Types.expressionStatement(
 			Types.awaitExpression(
-				this.createScopeCall('renderPartial', node.position, [
-					Types.objectExpression([
-						Types.objectProperty(
-							Types.identifier('templatePath'),
-							Types.stringLiteral(node.templatePath)
-						),
-						Types.objectProperty(
-							Types.identifier('currentContext'),
-							Types.thisExpression()
-						),
-						Types.objectProperty(
-							Types.identifier('context'),
-							Types.arrowFunctionExpression(
-								[],
-								this.cloneExpressionAtPosition(
-									node.context,
-									node.position
-								)
-							)
-						)
-					])
+				this.createRuntimeCall('renderPartialView', node.position, [
+					Types.stringLiteral(node.viewPath),
+					Types.thisExpression(),
+					node.context
 				])
 			)
 		);
 	}
 
-	private compileRenderDefaultSlotNode(node: RenderDefaultSlotNode): Types.Statement {
+	private compileRenderContentNode(node: RenderContentNode): Types.Statement {
 		return Types.expressionStatement(
-			this.createScopeCall('renderDefaultSlot', node.position)
-		);
-	}
-
-	private compileRenderSlotNode(node: RenderSlotNode): Types.Statement {
-		return Types.expressionStatement(
-			this.createScopeCall('renderSlot', node.position, [
-				Types.stringLiteral(node.slotName)
+			this.createRuntimeCall('renderContent', node.position, [
+				node.slotName ? Types.stringLiteral(node.slotName) : Types.nullLiteral()
 			])
 		);
 	}
 
 	private compileContentForNode(node: ContentForNode): Types.Statement {
-		return Types.expressionStatement(
-			Types.awaitExpression(
-				this.createScopeCall('contentFor', node.position, [
-					Types.stringLiteral(node.slotName),
-					Types.arrowFunctionExpression(
-						[],
-						Types.blockStatement(
-							this.mapChildNodes(node.childNodes)
-						),
-						true
-					)
+		return Types.blockStatement([
+			Types.expressionStatement(
+				this.createRuntimeCall('saveRenderTarget')
+			),
+
+			...this.compileNodes(node.childNodes),
+
+			Types.expressionStatement(
+				this.createRuntimeCall('mergeRenderTarget', null, [
+					Types.stringLiteral(node.slotName)
 				])
 			)
-		);
+		]);
 	}
 
-	// TODO: Fix sourcemaps
-	private compileExpressionNode(node: ExpressionNode): JSStatement {
-		return this.cloneStatementAtPosition(
-			node.statement,
-			node.position
-		);
-	}
+	private compilePrintNode(node: PrintNode): Types.Statement {
+		let statements = [];
 
-	// TODO: Fix sourcemaps
-	private compilePrintExpressionNode(node: PrintExpressionNode): Types.ExpressionStatement {
-		return Types.expressionStatement(
-			this.createAwaitExpressionIf(
-				this.isAwaitExpression(node.statement.expression),
-				this.createScopeCall('renderExpression', node.position, [
-					this.createWrapExpression(
-						node.statement.expression,
-						node.position
-					)
-				])
-			)
-		);
-	}
-
-	private compileCommentNode(node: CommentNode): Types.ExpressionStatement {
-		return Types.expressionStatement(
-			this.createScopeCall('renderComment', node.position, [
-				Types.stringLiteral(node.textContent)
-			])
-		);
-	}
-
-	private compileCDataNode(node: CDataNode): Types.Statement {
-		return Types.expressionStatement(
-			this.createScopeCall('renderCData', node.position, [
-				Types.stringLiteral(node.textContent)
-			])
-		);
-	}
-
-	private compileDoctypeNode(node: DoctypeNode): Types.Statement {
-		return Types.expressionStatement(
-			this.createScopeCall('renderDoctype', node.position)
-		);
-	}
-
-	// TODO: Fix source mapping
-	private compileElementNode(node: ElementNode): Types.Statement {
-		let attributeExpressions = node.attributes.map(attributeNode => {
-			switch (attributeNode.constructor) {
-				case NormalAttributeNode:
-					return this.compileNormalAttributeNode(attributeNode as NormalAttributeNode);
-				case BoundAttributeNode:
-					return this.compileOutputExpressionAttributeNode(attributeNode as BoundAttributeNode);
-				case AppendAttributeNode:
-					return this.compileAppendExpressionAttributeNode(attributeNode as AppendAttributeNode);
-				case BooleanAttributeNode:
-					return this.compileBooleanExpressionAttributeNode(attributeNode as BooleanAttributeNode);
-				default:
-					throw new Error('Encountered unsupported attribute node.');
-			}
-		});
-
-		return Types.expressionStatement(
-			Types.awaitExpression(
-				this.createScopeCall('renderElement', node.position, [
-					Types.objectExpression(
-						[
-							Types.objectProperty(
-								Types.identifier('tagName'),
-								Types.stringLiteral(node.tagName)
-							),
-							Types.objectProperty(
-								Types.identifier('isVoid'),
-								Types.booleanLiteral(node.isVoid)
-							),
-							Types.objectProperty(
-								Types.identifier('isSelfClosing'),
-								Types.booleanLiteral(node.isSelfClosing)
-							),
-							Types.objectProperty(
-								Types.identifier('attributes'),
-								Types.arrayExpression(
-									attributeExpressions
-								)
-							),
-							Types.objectProperty(
-								Types.identifier('body'),
-								Types.arrowFunctionExpression(
-									[],
-									Types.blockStatement(
-										this.mapChildNodes(node.childNodes)
+		if (node.hasBlock) {
+			statements.push(
+				Types.variableDeclaration(
+					'const',
+					[
+						Types.variableDeclarator(
+							Types.identifier(BLOCK_IDENTIFIER),
+							Types.arrowFunctionExpression(
+								node.blockArgs.map(blockArg => Types.identifier(blockArg.value)),
+								Types.blockStatement([
+									Types.expressionStatement(
+										this.createRuntimeCall('saveRenderTarget')
 									),
-									true
+
+									...this.compileNodes(node.childNodes),
+
+									Types.returnStatement(
+										Types.callExpression(
+											Types.memberExpression(
+												Types.callExpression(
+													Types.memberExpression(
+														Types.identifier(RUNTIME_IDENTIFIER),
+														Types.identifier('restoreRenderTarget')
+													),
+													[]
+												),
+												Types.identifier('getDefault')
+											),
+											[]
+										)
+									)
+								]),
+								true
+							)
+						)
+					]
+				)
+			);
+		}
+
+		statements.push(
+			Types.expressionStatement(
+				Types.awaitExpression(
+					this.createRuntimeCall('renderValue', node.position, [
+						node.expression
+					])
+				)
+			)
+		);
+
+		return Types.blockStatement(statements);
+	}
+
+	private compileExpressionNode(node: ExpressionNode): Types.Statement {
+		return node.statement;
+	}
+
+	private compilePrintExpressionNode(node: PrintExpressionNode): Types.Statement {
+		return Types.expressionStatement(
+			Types.awaitExpression(
+				this.createRuntimeCall('renderValue', node.position, [
+					node.statement.expression
+				])
+			)
+		);
+	}
+
+	private compileCommentExpressionNode(node: CommentExpressionNode): null {
+		return null;
+	}
+
+	private createViewModuleHeaders(): Types.Statement[] {
+		return [
+			Types.expressionStatement(
+				Types.assignmentExpression(
+					'=',
+					Types.identifier(MODULE_IDENTIFIER),
+					Types.identifier('module')
+				)
+			),
+			Types.expressionStatement(
+				Types.assignmentExpression(
+					'=',
+					Types.identifier(REQUIRE_IDENTIFIER),
+					Types.identifier('require')
+				)
+			),
+			Types.expressionStatement(
+				Types.assignmentExpression(
+					'=',
+					Types.identifier('module'),
+					Types.assignmentExpression(
+						'=',
+						Types.identifier('require'),
+						Types.identifier('undefined')
+					)
+				)
+			),
+			Types.expressionStatement(
+				Types.callExpression(
+					Types.memberExpression(
+						Types.callExpression(
+							Types.identifier(REQUIRE_IDENTIFIER),
+							[
+								Types.stringLiteral('source-map-support')
+							]
+						),
+						Types.identifier('install')
+					),
+					[
+						Types.objectExpression([
+							Types.objectProperty(
+								Types.identifier('retrieveSourceMap'),
+								Types.arrowFunctionExpression(
+									[
+										Types.identifier('source')
+									],
+									Types.conditionalExpression(
+										Types.binaryExpression(
+											'in',
+											Types.identifier('source'),
+											Types.memberExpression(
+												Types.memberExpression(
+													Types.identifier(MODULE_IDENTIFIER),
+													Types.identifier('exports')
+												),
+												Types.identifier('sourcemaps')
+											)
+										),
+										Types.memberExpression(
+											Types.memberExpression(
+												Types.memberExpression(
+													Types.identifier(MODULE_IDENTIFIER),
+													Types.identifier('exports')
+												),
+												Types.identifier('sourcemaps')
+											),
+											Types.identifier('source'),
+											true
+										),
+										Types.nullLiteral()
+									)
 								)
 							)
-						]
-					)
-				])
+						])
+					]
+				)
+			)
+		];
+	}
+
+	private createRuntimeCall(methodName: string, position: Position = null, argumentExpressions: Types.Expression[] = []): Types.CallExpression {
+		return this.setNodePosition(
+			position,
+			Types.callExpression(
+				Types.memberExpression(
+					Types.identifier(RUNTIME_IDENTIFIER),
+					Types.identifier(methodName)
+				),
+				argumentExpressions
 			)
 		);
 	}
 
-	// TODO: Fix source mapping
-	private compileNormalAttributeNode(node: NormalAttributeNode): Types.Expression {
-		let quoteExpression;
-		if (node.quote) {
-			quoteExpression = Types.stringLiteral(node.quote.symbol)
-		}
-		else {
-			quoteExpression = Types.nullLiteral();
+	private setNodePosition<T extends Types.Node>(position: Position, node: T): T {
+		if (!position) {
+			return node;
 		}
 
-		let valuesExpression = Types.arrayExpression(
-			node.values.map(value => {
-				if (typeof value === 'string') {
-					return Types.stringLiteral(
-						value
-					);
-				}
-				else {
-					return this.createWrapExpression(
-						value,
-						node.position
-					);
-				}
-			})
-		);
+		node.loc = {
+			start: {
+				line: position.line,
+				column: position.column - 1
+			},
+			end: {
+				line: position.line,
+				column: position.column - 1
+			}
+		};
 
-		return this.createScopeCall('createNormalAttribute', node.position, [
-			Types.objectExpression([
-				Types.objectProperty(
-					Types.identifier('name'),
-					Types.stringLiteral(node.name)
-				),
-				Types.objectProperty(
-					Types.identifier('quote'),
-					quoteExpression
-				),
-				Types.objectProperty(
-					Types.identifier('values'),
-					valuesExpression
-				)
-			])
-		]);
-	}
-
-	// TODO: Fix source mapping
-	private compileOutputExpressionAttributeNode(node: BoundAttributeNode): Types.Expression {
-		return this.createScopeCall('createBoundAttribute', node.position, [
-			Types.objectExpression([
-				Types.objectProperty(
-					Types.identifier('name'),
-					Types.stringLiteral(node.name)
-				),
-				Types.objectProperty(
-					Types.identifier('quote'),
-					Types.stringLiteral(node.quote.symbol)
-				),
-				Types.objectProperty(
-					Types.identifier('value'),
-					this.createWrapExpression(
-						node.expression,
-						node.position
-					)
-				)
-			])
-		]);
-	}
-
-	// TODO: Fix source mapping
-	private compileAppendExpressionAttributeNode(node: AppendAttributeNode): Types.Expression {
-		return this.createScopeCall('createAppendAttribute', node.position, [
-			Types.objectExpression([
-				Types.objectProperty(
-					Types.identifier('name'),
-					Types.stringLiteral(node.name)
-				),
-				Types.objectProperty(
-					Types.identifier('quote'),
-					Types.stringLiteral(node.quote.symbol)
-				),
-				Types.objectProperty(
-					Types.identifier('value'),
-					Types.stringLiteral(node.value)
-				),
-				Types.objectProperty(
-					Types.identifier('condition'),
-					this.createWrapExpression(
-						node.condition,
-						node.position
-					)
-				)
-			])
-		]);
-	}
-
-	// TODO: Fix source mapping
-	private compileBooleanExpressionAttributeNode(node: BooleanAttributeNode): Types.Expression {
-		return this.createScopeCall('createBooleanAttribute', node.position, [
-			Types.objectExpression([
-				Types.objectProperty(
-					Types.identifier('name'),
-					Types.stringLiteral(node.name)
-				),
-				Types.objectProperty(
-					Types.identifier('quote'),
-					Types.stringLiteral(node.quote.symbol)
-				),
-				Types.objectProperty(
-					Types.identifier('condition'),
-					this.createWrapExpression(
-						node.condition,
-						node.position
-					)
-				)
-			])
-		]);
-	}
-
-	private compileWhitespaceNode(node: WhitespaceNode): Types.Statement {
-		return Types.expressionStatement(
-			this.createScopeCall('renderText', node.position, [
-				Types.stringLiteral(node.textContent)
-			])
-		);
-	}
-
-	private compileTextNode(node: TextNode): Types.Statement {
-		return Types.expressionStatement(
-			this.createScopeCall('renderText', node.position, [
-				Types.stringLiteral(node.textContent)
-			])
-		);
-	}
-
-	// ========================================================================
-
-	private mapChildNodes(childNodes: Node[]): Types.Statement[] {
-		return childNodes
-			.flatMap(childNode => this.compileNode(childNode))
-			.filter(expression => expression);
-	}
-
-	createAwaitExpressionIf(condition, expression) {
-		if (condition) {
-			return Types.awaitExpression(expression);
-		}
-		else {
-			return expression;
-		}
-	}
-
-	// TODO: Check for Async expressions inside arguments
-	// TODO: Assign position to node
-	private createScopeCall(methodName: string, position: Position, argumentExpressions: Types.Expression[] = []): Types.CallExpression {
-		return Types.callExpression(
-			Types.memberExpression(
-				Types.identifier(SCOPE_IDENTIFIER),
-				Types.identifier(methodName)
-			),
-			argumentExpressions
-		);
-	}
-
-	private createWrapExpression(expression: JSValueExpression, position: Position): Types.ArrowFunctionExpression {
-		return Types.arrowFunctionExpression(
-			[],
-			this.cloneExpressionAtPosition(
-				expression,
-				position
-			),
-			this.isAwaitExpression(expression)
-		);
-	}
-
-	private createPositionExpression(position: Position): Types.Expression {
-		return Types.arrayExpression([
-			Types.numericLiteral(position.line),
-			Types.numericLiteral(position.column)
-		]);
-	}
-
-	private isAwaitExpression(expressionNode: Types.Expression | Types.VariableDeclaration): boolean {
-		if (Types.isVariableDeclaration(expressionNode)) {
-			return expressionNode.declarations.some(declarationNode => {
-				return Types.isAwaitExpression(declarationNode.init);
-			});
-		}
-		else if (Types.isBinaryExpression(expressionNode)) {
-			return (
-				Types.isAwaitExpression(
-					expressionNode.left
-				)
-				||
-				Types.isAwaitExpression(
-					expressionNode.right
-				)
-			);
-		}
-		else if (Types.isUnaryExpression(expressionNode)) {
-			return Types.isAwaitExpression(
-				expressionNode.argument
-			);
-		}
-		else {
-			return Types.isAwaitExpression(expressionNode);
-		}
-	}
-
-	// TODO: Add position data to cloned node using 'loc' property
-	private cloneExpressionAtPosition(node: JSValueExpression, position: Position): JSValueExpression {
-		return Types.cloneDeepWithoutLoc(node);
-	}
-
-	// TODO: Add position data to cloned node using 'loc' property
-	private cloneStatementAtPosition(node: JSStatement, position: Position): JSStatement {
-		return Types.cloneDeepWithoutLoc(node);
+		return node;
 	}
 
 }
