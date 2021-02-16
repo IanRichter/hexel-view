@@ -6,12 +6,14 @@ npm install hexel-view
 ```
 
 ## TODO
+- Rename `BlockValue` for Parser
 - Split expression into two types: Output and non-output
 - Add `@extend` support
 - Write tests
 
 ## Bugs
 - Doctype must be case insensitive
+- CData must be case insensitive
 
 ## Features
 - Standard HTML5
@@ -32,24 +34,29 @@ Some additional conveniences have also been added:
 - Any element can use the self-closing element syntax: `<element />`
 
 ## Embedded JavaScript expressions
-### Output expressions
-```html
-{{ expression }}
+### Expression (ExpressionNode)
+```
+{% expression %}
 ```
 
-### Variable declarations
+### Print expression (PrintExpressioNode)
 ```html
-{{ let value = expression }}
+{%= expression %}
 ```
 
-### Expression comment
+### Variable declaration (ExpressionNode)
 ```html
-{{# Comment text }}
+{% let value = expression %}
+```
+
+### Expression comment (ExpressionCommentNode)
+```html
+{%# Comment text %}
 ```
 
 ## Enhanced HTML attributes
 
-### Attribute value interpolation
+### Attribute value interpolation (NormalAttributeNode)
 ```html
 <element attribute="{{ expression }}">
 
@@ -57,7 +64,7 @@ E.g.
 <a href="/items/{{ item.id }}/edit">
 ```
 
-### Attribute value as expression
+### Attribute value as expression (BoundAttributeNode)
 ```html
 <element [attribute]="<expression>">
 
@@ -65,7 +72,7 @@ E.g.
 <a [href]="showPath">
 ```
 
-### Append attribute value
+### Append attribute value (AppendAttributeNode)
 ```html
 <element [attribute.value]="<expression>">
 
@@ -73,7 +80,7 @@ E.g.
 <div [class.is-open]="isOpen">
 ```
 
-### Boolean attributes
+### Boolean attribute (BooleanAttributeNode)
 ```html
 <element [?attribute]="<expression>">
 
@@ -88,7 +95,7 @@ E.g.
 </js>
 ```
 
-## Print statement
+## Print block
 ```html
 <js @print="<expression>" />
 ```

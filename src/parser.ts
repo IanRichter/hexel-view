@@ -23,7 +23,7 @@ import { RenderSlotNode } from './nodes/render-slot-node';
 import { ContentForNode } from './nodes/content-for-node';
 import { BlockClosingNode } from './nodes/block-closing-node';
 import { ExpressionNode } from './nodes/expression-node';
-import { ExpressionCommentNode } from './nodes/expression-comment-node';
+import { CommentExpressionNode } from './nodes/comment-expression-node';
 import { CommentNode } from './nodes/comment-node';
 import { CDataNode } from './nodes/cdata-node';
 import { DoctypeNode } from './nodes/doctype-node';
@@ -31,54 +31,47 @@ import { ElementNode } from './nodes/element-node';
 import { ElementClosingNode } from './nodes/element-closing-node';
 import { ElementAttributeNode } from './nodes/element-attribute-node';
 import { NormalAttributeNode } from './nodes/normal-attribute-node';
-import { BooleanExpressionAttributeNode } from './nodes/boolean-expression-attribute-node';
-import { AppendExpressionAttributeNode } from './nodes/append-expression-attribute-node';
-import { OutputExpressionAttributeNode } from './nodes/output-expression-attribute-node';
+import { BoundAttributeNode } from './nodes/bound-attribute-node';
+import { AppendAttributeNode } from './nodes/append-attribute-node';
+import { BooleanAttributeNode } from './nodes/boolean-attribute-node';
 import { WhitespaceNode } from './nodes/whitespace-node';
 import { TextNode } from './nodes/text-node';
-import { ParserOptions } from './parser-options';
-import { JSValueExpression, JSStatement } from './js-types';
+import { JSValueExpression, JSStatement, JSPrintStatement } from './js-types';
+import { PrintExpressionNode } from './nodes/print-expression-node';
+import { ATTRIBUTE_NAME_TERMINATING_TOKENS, HTML_QUOTE_TOKENS, INVALID_NODE_START_TOKENS, INVALID_TEXT_TOKENS, NORMAL_ATTRIBUTE_STRING_TERMINATING_TOKENS, VARIABLE_NAME_START_TOKENS, VARIABLE_NAME_VALID_TOKENS } from './token-constants';
+
+interface BlockValue {
+	position: Position;
+	valueString: string;
+}
+
+const VOID_ELEMENTS: string[] = [
+	'area',
+	'base',
+	'br',
+	'col',
+	'command',
+	'embed',
+	'hr',
+	'img',
+	'input',
+	'keygen',
+	'link',
+	'meta',
+	'param',
+	'source',
+	'track',
+	'wbr'
+];
 
 export class Parser {
 
 	private lexer: Lexer;
 
-	private blockTagName: string;
-	private expressionStartDelimiter: string;
-	private expressionStartEscapeDelimiter: string;
-	private expressionCommentStartDelimiter: string;
-	private expressionEndDelimiter: string;
-	private expressionEndEscapeDelimiter: string;
-
 	// ========================================================================
 
-	public constructor({
-		blockTagName = 'js',
-		expressionStartDelimiter = '{{',
-		expressionStartEscapeDelimiter = '{{{',
-		expressionCommentStartDelimiter = '{{#',
-		expressionEndDelimiter = '}}',
-		expressionEndEscapeDelimiter = '}}}'
-	}: ParserOptions = {}) {
-		this.blockTagName = blockTagName;
-		this.expressionStartDelimiter = expressionStartDelimiter;
-		this.expressionStartEscapeDelimiter = expressionStartEscapeDelimiter;
-		this.expressionCommentStartDelimiter = expressionCommentStartDelimiter;
-		this.expressionEndDelimiter = expressionEndDelimiter;
-		this.expressionEndEscapeDelimiter = expressionEndEscapeDelimiter;
-	}
-
-	public parse(filename: string, viewSource: string): TemplateNode {
-		this.lexer = new Lexer({
-			inputString: viewSource,
-			blockTagName: this.blockTagName,
-			expressionStartDelimiter: this.expressionStartDelimiter,
-			expressionStartEscapeDelimiter: this.expressionStartEscapeDelimiter,
-			expressionCommentStartDelimiter: this.expressionCommentStartDelimiter,
-			expressionEndDelimiter: this.expressionEndDelimiter,
-			expressionEndEscapeDelimiter: this.expressionEndEscapeDelimiter
-		});
-
+	public parse(lexer: Lexer, filename: string, viewSource: string): TemplateNode {
+		this.lexer = lexer;
 		return this.parseTemplate(filename, viewSource);
 	}
 
@@ -104,6 +97,7 @@ export class Parser {
 		}
 
 		switch (this.peek().type) {
+			// Blocks
 			case TokenType.Scope:
 				return this.parseScopeNode();
 			case TokenType.Print:
@@ -124,10 +118,16 @@ export class Parser {
 				return this.parseRenderSlotNode();
 			case TokenType.ContentFor:
 				return this.parseContentForNode();
+
+			// Expressions
 			case TokenType.ExpressionStart:
 				return this.parseExpressionNode();
-			case TokenType.ExpressionCommentStart:
-				return this.parseExpressionCommentNode();
+			case TokenType.PrintExpressionStart:
+				return this.parsePrintExpressionNode();
+			case TokenType.CommentExpressionStart:
+				return this.parseCommentExpressionNode();
+
+			// HTML
 			case TokenType.CommentStart:
 				return this.parseCommentNode();
 			case TokenType.CDataStart:
@@ -227,8 +227,8 @@ export class Parser {
 			if (this.matches(TokenType.Whitespace)) {
 				this.consume();
 			}
-			else if (this.matches(TokenType.ExpressionCommentStart)) {
-				this.parseExpressionCommentNode();
+			else if (this.matches(TokenType.CommentExpressionStart)) {
+				this.parseCommentExpressionNode();
 			}
 			else if (this.matches(TokenType.ElseIf)) {
 				node.alternateNode = this.parseElseIfNode();
@@ -259,8 +259,8 @@ export class Parser {
 			if (this.matches(TokenType.Whitespace)) {
 				this.consume();
 			}
-			else if (this.matches(TokenType.ExpressionCommentStart)) {
-				this.parseExpressionCommentNode();
+			else if (this.matches(TokenType.CommentExpressionStart)) {
+				this.parseCommentExpressionNode();
 			}
 			else if (this.matches(TokenType.ElseIf)) {
 				node.alternateNode = this.parseElseIfNode();
@@ -299,8 +299,8 @@ export class Parser {
 			if (this.matches(TokenType.Whitespace)) {
 				this.consume();
 			}
-			else if (this.matches(TokenType.ExpressionCommentStart)) {
-				this.parseExpressionCommentNode();
+			else if (this.matches(TokenType.CommentExpressionStart)) {
+				this.parseCommentExpressionNode();
 			}
 			else if (this.matches(TokenType.Case)) {
 				node.cases.push(this.parseCaseNode());
@@ -391,8 +391,8 @@ export class Parser {
 			if (this.matches(TokenType.Whitespace)) {
 				this.consume();
 			}
-			else if (this.matches(TokenType.ExpressionCommentStart)) {
-				this.parseExpressionCommentNode();
+			else if (this.matches(TokenType.CommentExpressionStart)) {
+				this.parseCommentExpressionNode();
 			}
 			else if (this.matches(TokenType.Else)) {
 				node.alternateNode = this.parseElseNode();
@@ -506,9 +506,20 @@ export class Parser {
 		return node;
 	}
 
-	private parseExpressionCommentNode(): ExpressionCommentNode {
-		let node = new ExpressionCommentNode(this.getTokenPostion());
-		this.expect(TokenType.ExpressionCommentStart);
+	private parsePrintExpressionNode(): PrintExpressionNode {
+		let node = new PrintExpressionNode(this.getTokenPostion());
+		this.expect(TokenType.PrintExpressionStart);
+		node.statement = this.parseJSPrintStatement({
+			position: this.getTokenPostion(),
+			valueString: this.consumeWhile(() => !this.matches(TokenType.ExpressionEnd))
+		});
+		this.expect(TokenType.ExpressionEnd);
+		return node;
+	}
+
+	private parseCommentExpressionNode(): CommentExpressionNode {
+		let node = new CommentExpressionNode(this.getTokenPostion());
+		this.expect(TokenType.CommentExpressionStart);
 		node.textContent = this.consumeWhile(() => !this.matches(TokenType.ExpressionEnd));
 		this.expect(TokenType.ExpressionEnd);
 		return node;
@@ -542,7 +553,7 @@ export class Parser {
 
 	private parseElementNode(): ElementNode {
 		let node = new ElementNode(this.getTokenPostion());
-		node.tagName = this.expect(TokenType.ElementStart).tagName;
+		node.tagName = this.expect(TokenType.ElementStart).properties.get('tagName');
 		node.isVoid = VOID_ELEMENTS.includes(node.tagName);
 		this.consumeOptional(TokenType.Whitespace);
 
@@ -581,7 +592,7 @@ export class Parser {
 
 	private parseElementClosingNode(): ElementClosingNode {
 		let node = new ElementClosingNode(this.getTokenPostion());
-		node.tagName = this.expect(TokenType.ElementClosingStart).tagName;
+		node.tagName = this.expect(TokenType.ElementClosingStart).properties.get('tagName');
 		this.consumeOptional(TokenType.Whitespace);
 		this.expect(TokenType.RightAngleBrace);
 		return node;
@@ -597,16 +608,16 @@ export class Parser {
 		this.expect(TokenType.LeftSquareBrace);
 
 		if (this.matches(TokenType.QuestionMark)) {
-			return this.parseBooleanExpressionAttributeNode(position);
+			return this.parseBooleanAttributeNode(position);
 		}
 
 		let name = this.parseAttributeName();
 
 		if (this.matches(TokenType.Dot)) {
-			return this.parseAppendExpressionAttributeNode(position, name);
+			return this.parseAppendAttributeNode(position, name);
 		}
 
-		return this.parseOutputExpressionAttributeNode(position, name);
+		return this.parseBoundAttributeNode(position, name);
 	}
 
 	private parseNormalAttributeNode(position: Position): NormalAttributeNode {
@@ -625,29 +636,21 @@ export class Parser {
 		node.values = [];
 		while (!this.isEOF()  && !this.matches(node.quote.type)) {
 			switch (this.peek().type) {
-				case TokenType.ExpressionStart: {
+				case TokenType.PrintExpressionStart: {
 					this.consume();
-					node.values.push(this.parseJSValueExpression({
-						position: this.getTokenPostion(),
-						valueString: this.consumeWhile(() => !this.matches(TokenType.ExpressionEnd))
-					}));
+					let position = this.getTokenPostion();
+					let valueString = this.consumeWhile(() => !this.matches(TokenType.ExpressionEnd));
+					node.values.push(this.parseJSValueExpression({ position, valueString }));
 					this.expect(TokenType.ExpressionEnd);
 					break;
 				}
 				case TokenType.ExpressionEnd:
 					throw new ParseError('Encountered unexpected token.', this.getTokenPostion());
-				case TokenType.ExpressionCommentStart:
+				case TokenType.ExpressionStart:
+				case TokenType.CommentExpressionStart:
 					this.consume();
 					this.consumeWhile(() => !this.matches(TokenType.ExpressionEnd));
 					this.expect(TokenType.ExpressionEnd);
-					break;
-				case TokenType.ExpressionStartEscape:
-					this.consume();
-					node.values.push(this.lexer.expressionStartDelimiter);
-					break;
-				case TokenType.ExpressionEndEscape:
-					this.consume();
-					node.values.push(this.lexer.expressionEndDelimiter);
 					break;
 				default: {
 					let value = this.consumeWhile(() => !this.matches(node.quote.type) && !this.matchesOneOf(NORMAL_ATTRIBUTE_STRING_TERMINATING_TOKENS));
@@ -660,16 +663,15 @@ export class Parser {
 		return node;
 	}
 
-	private parseBooleanExpressionAttributeNode(position: Position): BooleanExpressionAttributeNode {
-		let node = new BooleanExpressionAttributeNode(position);
-		this.expect(TokenType.QuestionMark);
-		node.name = this.parseAttributeName();
+	private parseBoundAttributeNode(position: Position, name: string): BoundAttributeNode {
+		let node = new BoundAttributeNode(position);
+		node.name = name;
 		this.expect(TokenType.RightSquareBrace);
 		this.consumeOptional(TokenType.Whitespace);
 		this.expect(TokenType.Equals);
 		this.consumeOptional(TokenType.Whitespace);
 		node.quote = this.expectOneOf(HTML_QUOTE_TOKENS);
-		node.condition = this.parseJSValueExpression({
+		node.expression = this.parseJSValueExpression({
 			position: this.lexer.getPosition(),
 			valueString: this.lexer.consumeRawUntilMatches(node.quote.symbol)
 		});
@@ -677,8 +679,8 @@ export class Parser {
 		return node;
 	}
 
-	private parseAppendExpressionAttributeNode(position: Position, name: string): AppendExpressionAttributeNode {
-		let node = new AppendExpressionAttributeNode(position);
+	private parseAppendAttributeNode(position: Position, name: string): AppendAttributeNode {
+		let node = new AppendAttributeNode(position);
 		node.name = name;
 		this.expect(TokenType.Dot);
 		node.value = this.consumeWhile(() => !this.matchesOneOf(ATTRIBUTE_NAME_TERMINATING_TOKENS));
@@ -695,15 +697,16 @@ export class Parser {
 		return node;
 	}
 
-	private parseOutputExpressionAttributeNode(position: Position, name: string): OutputExpressionAttributeNode {
-		let node = new OutputExpressionAttributeNode(position);
-		node.name = name;
+	private parseBooleanAttributeNode(position: Position): BooleanAttributeNode {
+		let node = new BooleanAttributeNode(position);
+		this.expect(TokenType.QuestionMark);
+		node.name = this.parseAttributeName();
 		this.expect(TokenType.RightSquareBrace);
 		this.consumeOptional(TokenType.Whitespace);
 		this.expect(TokenType.Equals);
 		this.consumeOptional(TokenType.Whitespace);
 		node.quote = this.expectOneOf(HTML_QUOTE_TOKENS);
-		node.expression = this.parseJSValueExpression({
+		node.condition = this.parseJSValueExpression({
 			position: this.lexer.getPosition(),
 			valueString: this.lexer.consumeRawUntilMatches(node.quote.symbol)
 		});
@@ -732,17 +735,7 @@ export class Parser {
 		node.textContent = '';
 
 		while (!this.isEOF() && !this.matchesOneOf(INVALID_TEXT_TOKENS)) {
-			if (this.matches(TokenType.ExpressionStartEscape)) {
-				this.consume();
-				node.textContent += this.lexer.expressionStartDelimiter;
-			}
-			else if (this.matches(TokenType.ExpressionEndEscape)) {
-				this.consume();
-				node.textContent += this.lexer.expressionEndDelimiter;
-			}
-			else {
-				node.textContent += this.consume().symbol;
-			}
+			node.textContent += this.consume().symbol;
 		}
 
 		return node;
@@ -750,7 +743,7 @@ export class Parser {
 
 	private parseEmbeddedLanguageTextNode(tagName: string): TextNode {
 		let node = new TextNode(this.getTokenPostion());
-		node.textContent = this.consumeWhile(() => !this.matches(TokenType.ElementClosingStart) || this.peek().tagName !== tagName);
+		node.textContent = this.consumeWhile(() => !this.matches(TokenType.ElementClosingStart) || this.peek().properties.get('tagName') !== tagName);
 		return node;
 	}
 
@@ -777,6 +770,16 @@ export class Parser {
 		}
 
 		return statement as JSStatement;
+	}
+
+	private parseJSPrintStatement(blockValue: BlockValue): JSPrintStatement {
+		let statement = this.parseJSCode(blockValue.position, blockValue.valueString);
+
+		if (statement.type !== 'ExpressionStatement') {
+			throw new ParseError('Encountered unsupported expression', blockValue.position);
+		}
+
+		return statement;
 	}
 
 	private parseJSCode(position: Position, code: string): Types.Node {
@@ -883,105 +886,3 @@ export class Parser {
 	}
 
 }
-
-interface BlockValue {
-	position: Position;
-	valueString: string;
-}
-
-const VOID_ELEMENTS: string[] = [
-	'area',
-	'base',
-	'br',
-	'col',
-	'command',
-	'embed',
-	'hr',
-	'img',
-	'input',
-	'keygen',
-	'link',
-	'meta',
-	'param',
-	'source',
-	'track',
-	'wbr'
-];
-
-const HTML_QUOTE_TOKENS: TokenType[] = [
-	TokenType.DoubleQuote,
-	TokenType.SingleQuote
-];
-
-const INVALID_NODE_START_TOKENS: TokenType[] = [
-	TokenType.ElseIf,
-	TokenType.Else,
-	TokenType.Case,
-	TokenType.DefaultCase,
-
-	TokenType.BlockClosingStart,
-
-	TokenType.ExpressionEnd,
-
-	TokenType.ElementClosingStart
-];
-
-const INVALID_TEXT_TOKENS: TokenType[] = [
-	TokenType.Scope,
-	TokenType.Print,
-	TokenType.If,
-	TokenType.ElseIf,
-	TokenType.Else,
-	TokenType.Switch,
-	TokenType.Case,
-	TokenType.DefaultCase,
-	TokenType.Foreach,
-	TokenType.While,
-	TokenType.Render,
-	TokenType.RenderDefaultSlot,
-	TokenType.RenderSlot,
-	TokenType.ContentFor,
-
-	TokenType.BlockClosingStart,
-
-	TokenType.ExpressionStart,
-	TokenType.ExpressionCommentStart,
-	TokenType.ExpressionEnd,
-
-	TokenType.CommentStart,
-	TokenType.CDataStart,
-	TokenType.Doctype,
-	TokenType.ElementStart,
-	TokenType.ElementClosingStart
-];
-
-const ATTRIBUTE_NAME_TERMINATING_TOKENS: TokenType[] = [
-	TokenType.Whitespace,
-	TokenType.Equals,
-	TokenType.Dot,
-	TokenType.RightSquareBrace,
-	TokenType.ForwardSlash,
-	TokenType.RightAngleBrace,
-	...HTML_QUOTE_TOKENS
-];
-
-const NORMAL_ATTRIBUTE_STRING_TERMINATING_TOKENS: TokenType[] = [
-	TokenType.ExpressionStart,
-	TokenType.ExpressionEnd,
-	TokenType.ExpressionCommentStart,
-	TokenType.ExpressionStartEscape,
-	TokenType.ExpressionEndEscape
-];
-
-const VARIABLE_NAME_START_TOKENS: TokenType[] = [
-	TokenType.Letters,
-	TokenType.Underscore,
-	TokenType.Dollar
-];
-
-const VARIABLE_NAME_VALID_TOKENS: TokenType[] = [
-	TokenType.Letters,
-	TokenType.Numbers,
-	TokenType.Underscore,
-	TokenType.Dollar
-];

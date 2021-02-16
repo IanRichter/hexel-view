@@ -2,8 +2,8 @@ import generate  from '@babel/generator';
 import * as Types from '@babel/types';
 import Module from 'module';
 import { JSStatement, JSValueExpression } from './js-types';
-import { AppendExpressionAttributeNode } from './nodes/append-expression-attribute-node';
-import { BooleanExpressionAttributeNode } from './nodes/boolean-expression-attribute-node';
+import { AppendAttributeNode } from './nodes/append-attribute-node';
+import { BooleanAttributeNode } from './nodes/boolean-attribute-node';
 import { CaseNode } from './nodes/case-node';
 import { CDataNode } from './nodes/cdata-node';
 import { CommentNode } from './nodes/comment-node';
@@ -13,13 +13,13 @@ import { DoctypeNode } from './nodes/doctype-node';
 import { ElementNode } from './nodes/element-node';
 import { ElseIfNode } from './nodes/else-if-node';
 import { ElseNode } from './nodes/else-node';
-import { ExpressionCommentNode } from './nodes/expression-comment-node';
+import { CommentExpressionNode } from './nodes/comment-expression-node';
 import { ExpressionNode } from './nodes/expression-node';
 import { ForeachNode } from './nodes/foreach-node';
 import { IfNode } from './nodes/if-node';
 import { Node } from './nodes/node';
 import { NormalAttributeNode } from './nodes/normal-attribute-node';
-import { OutputExpressionAttributeNode } from './nodes/output-expression-attribute-node';
+import { BoundAttributeNode } from './nodes/bound-attribute-node';
 import { PrintNode } from './nodes/print-node';
 import { RenderDefaultSlotNode } from './nodes/render-default-slot-node';
 import { RenderNode } from './nodes/render-node';
@@ -32,6 +32,7 @@ import { WhileNode } from './nodes/while-node';
 import { WhitespaceNode } from './nodes/whitespace-node';
 import { Position } from './position';
 import { View } from './view';
+import { PrintExpressionNode } from './nodes/print-expression-node';
 
 interface CustomModule extends Module {
 	_compile(code: string, filename: string): void;
@@ -135,7 +136,9 @@ export class Compiler {
 				return this.compileContentForNode(node as ContentForNode);
 			case ExpressionNode:
 				return this.compileExpressionNode(node as ExpressionNode);
-			case ExpressionCommentNode:
+			case PrintExpressionNode:
+				return this.compilePrintExpressionNode(node as PrintExpressionNode);
+			case CommentExpressionNode:
 				return null;
 			case CommentNode:
 				return this.compileCommentNode(node as CommentNode);
@@ -398,36 +401,26 @@ export class Compiler {
 	}
 
 	// TODO: Fix sourcemaps
-	// TODO: Split apart into output expressions and simple expressions
 	private compileExpressionNode(node: ExpressionNode): JSStatement {
-		if (Types.isVariableDeclaration(node.statement)) {
-			return this.cloneStatementAtPosition(
-				node.statement,
-				node.position
-			);
-		}
-		else if (
-			Types.isAssignmentExpression(node.statement.expression) ||
-			Types.isUpdateExpression(node.statement.expression)
-		) {
-			return this.cloneStatementAtPosition(
-				node.statement,
-				node.position
-			);
-		}
-		else {
-			return Types.expressionStatement(
-				this.createAwaitExpressionIf(
-					this.isAwaitExpression(node.statement.expression),
-					this.createScopeCall('renderExpression', node.position, [
-						this.createWrapExpression(
-							node.statement.expression,
-							node.position
-						)
-					])
-				)
-			);
-		}
+		return this.cloneStatementAtPosition(
+			node.statement,
+			node.position
+		);
+	}
+
+	// TODO: Fix sourcemaps
+	private compilePrintExpressionNode(node: PrintExpressionNode): Types.ExpressionStatement {
+		return Types.expressionStatement(
+			this.createAwaitExpressionIf(
+				this.isAwaitExpression(node.statement.expression),
+				this.createScopeCall('renderExpression', node.position, [
+					this.createWrapExpression(
+						node.statement.expression,
+						node.position
+					)
+				])
+			)
+		);
 	}
 
 	private compileCommentNode(node: CommentNode): Types.ExpressionStatement {
@@ -458,12 +451,12 @@ export class Compiler {
 			switch (attributeNode.constructor) {
 				case NormalAttributeNode:
 					return this.compileNormalAttributeNode(attributeNode as NormalAttributeNode);
-				case OutputExpressionAttributeNode:
-					return this.compileOutputExpressionAttributeNode(attributeNode as OutputExpressionAttributeNode);
-				case BooleanExpressionAttributeNode:
-					return this.compileBooleanExpressionAttributeNode(attributeNode as BooleanExpressionAttributeNode);
-				case AppendExpressionAttributeNode:
-					return this.compileAppendExpressionAttributeNode(attributeNode as AppendExpressionAttributeNode);
+				case BoundAttributeNode:
+					return this.compileOutputExpressionAttributeNode(attributeNode as BoundAttributeNode);
+				case AppendAttributeNode:
+					return this.compileAppendExpressionAttributeNode(attributeNode as AppendAttributeNode);
+				case BooleanAttributeNode:
+					return this.compileBooleanExpressionAttributeNode(attributeNode as BooleanAttributeNode);
 				default:
 					throw new Error('Encountered unsupported attribute node.');
 			}
@@ -554,8 +547,8 @@ export class Compiler {
 	}
 
 	// TODO: Fix source mapping
-	private compileOutputExpressionAttributeNode(node: OutputExpressionAttributeNode): Types.Expression {
-		return this.createScopeCall('createOutputExpressionAttribute', node.position, [
+	private compileOutputExpressionAttributeNode(node: BoundAttributeNode): Types.Expression {
+		return this.createScopeCall('createBoundAttribute', node.position, [
 			Types.objectExpression([
 				Types.objectProperty(
 					Types.identifier('name'),
@@ -577,8 +570,8 @@ export class Compiler {
 	}
 
 	// TODO: Fix source mapping
-	private compileBooleanExpressionAttributeNode(node: BooleanExpressionAttributeNode): Types.Expression {
-		return this.createScopeCall('createBooleanExpressionAttribute', node.position, [
+	private compileAppendExpressionAttributeNode(node: AppendAttributeNode): Types.Expression {
+		return this.createScopeCall('createAppendAttribute', node.position, [
 			Types.objectExpression([
 				Types.objectProperty(
 					Types.identifier('name'),
@@ -587,6 +580,10 @@ export class Compiler {
 				Types.objectProperty(
 					Types.identifier('quote'),
 					Types.stringLiteral(node.quote.symbol)
+				),
+				Types.objectProperty(
+					Types.identifier('value'),
+					Types.stringLiteral(node.value)
 				),
 				Types.objectProperty(
 					Types.identifier('condition'),
@@ -600,8 +597,8 @@ export class Compiler {
 	}
 
 	// TODO: Fix source mapping
-	private compileAppendExpressionAttributeNode(node: AppendExpressionAttributeNode): Types.Expression {
-		return this.createScopeCall('createAppendExpressionAttribute', node.position, [
+	private compileBooleanExpressionAttributeNode(node: BooleanAttributeNode): Types.Expression {
+		return this.createScopeCall('createBooleanAttribute', node.position, [
 			Types.objectExpression([
 				Types.objectProperty(
 					Types.identifier('name'),
@@ -610,10 +607,6 @@ export class Compiler {
 				Types.objectProperty(
 					Types.identifier('quote'),
 					Types.stringLiteral(node.quote.symbol)
-				),
-				Types.objectProperty(
-					Types.identifier('value'),
-					Types.stringLiteral(node.value)
 				),
 				Types.objectProperty(
 					Types.identifier('condition'),

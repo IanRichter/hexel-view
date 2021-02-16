@@ -1,6 +1,6 @@
 import { Node } from './node';
 
-export class ExpressionCommentNode extends Node {
+export class CommentExpressionNode extends Node {
 
 	public textContent: string = null;
 

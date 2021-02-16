@@ -21,9 +21,8 @@ export enum TokenType {
 
 	ExpressionStart = 'ExpressionStart',
 	ExpressionEnd = 'ExpressionEnd',
-	ExpressionStartEscape = 'ExpressionStartEscape',
-	ExpressionEndEscape = 'ExpressionEndEscape',
-	ExpressionCommentStart = 'ExpressionCommentStart',
+	PrintExpressionStart = 'PrintExpressionStart',
+	CommentExpressionStart = 'CommentExpressionStart',
 
 	CommentStart = 'CommentStart',
 	CommentEnd = 'CommentEnd',

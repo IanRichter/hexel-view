@@ -1,3 +1,4 @@
+import { ExpressionTags } from './expression-tags';
 import { ParseError } from './parse-error';
 import { Position } from './position';
 import { Token } from './token';
@@ -11,26 +12,13 @@ export class Lexer {
 	private columnNumber: number = 1;
 	private tokenBuffer: Token = null;
 
-	public readonly blockTagName: string;
-	public readonly expressionStartDelimiter: string;
-	public readonly expressionStartEscapeDelimiter: string;
-	public readonly expressionCommentStartDelimiter: string;
-	public readonly expressionEndDelimiter: string;
-	public readonly expressionEndEscapeDelimiter: string;
+	public readonly tags: ExpressionTags;
 
 	// ========================================================================
 
-	public constructor(options: LexerConfiguration) {
-		this.inputString = options.inputString.replace(/\r\n/g, '\n');
-
-		this.blockTagName = options.blockTagName;
-		this.expressionStartDelimiter = options.expressionStartDelimiter;
-		this.expressionStartEscapeDelimiter = options.expressionStartEscapeDelimiter;
-		this.expressionCommentStartDelimiter = options.expressionCommentStartDelimiter;
-		this.expressionEndDelimiter = options.expressionEndDelimiter;
-		this.expressionEndEscapeDelimiter = options.expressionEndEscapeDelimiter;
-
-		this.verifyDynamicTokens();
+	public constructor(inputString: string, tags: ExpressionTags) {
+		this.inputString = inputString.replace(/\r\n/g, '\n');
+		this.tags = Object.freeze(tags);
 	}
 
 	public consumeRawUntilMatches(matchChar: string): string {
@@ -57,38 +45,16 @@ export class Lexer {
 
 	// ========================================================================
 
-	private verifyDynamicTokens() {
-		if (this.expressionStartDelimiter.length < 2) {
-			throw new Error('expressionStartDelimiter must be at least 2 characters long.');
-		}
-
-		if (this.expressionEndDelimiter.length < 2) {
-			throw new Error('expressionEndDelimiter must be at least 2 characters long.');
-		}
-
-		if (this.expressionStartEscapeDelimiter.substring(0, this.expressionStartDelimiter.length) !== this.expressionStartDelimiter) {
-			throw new Error('expressionStartEscapeDelimiter must start with the same characters as expressionStartDelimiter.');
-		}
-
-		if (this.expressionCommentStartDelimiter.substring(0, this.expressionStartDelimiter.length) !== this.expressionStartDelimiter) {
-			throw new Error('expressionCommentStartDelimiter must start with the same characters as expressionStartDelimiter.');
-		}
-
-		if (this.expressionEndEscapeDelimiter.substring(this.expressionEndEscapeDelimiter.length - this.expressionEndDelimiter.length) !== this.expressionEndDelimiter) {
-			throw new Error('expressionEndEscapeDelimiter must end with the same characters as expressionEndDelimiter.');
-		}
-	}
-
 	private parseToken(): Token {
 		if (this.isEOF()) {
 			return null;
 		}
 
-		if (this.matchesSubstring(this.expressionStartDelimiter)) {
+		if (this.matchesSubstring(this.tags.expressionStart)) {
 			return this.getExpressionStartToken();
 		}
 
-		if (this.matchesSubstring(this.expressionEndDelimiter)) {
+		if (this.matchesSubstring(this.tags.expressionEnd)) {
 			return this.getExpressionEndToken();
 		}
 
@@ -147,32 +113,26 @@ export class Lexer {
 	}
 
 	private getExpressionStartToken(): Token {
-		if (this.matchesSubstring(this.expressionStartEscapeDelimiter)) {
-			let token = this.createToken(TokenType.ExpressionStartEscape);
-			token.symbol += this.expectSubstring(this.expressionStartEscapeDelimiter);
+		if (this.matchesSubstring(this.tags.commentStart)) {
+			let token = this.createToken(TokenType.CommentExpressionStart);
+			token.symbol += this.expectSubstring(this.tags.commentStart);
 			return token;
 		}
 
-		if (this.matchesSubstring(this.expressionCommentStartDelimiter)) {
-			let token = this.createToken(TokenType.ExpressionCommentStart);
-			token.symbol += this.expectSubstring(this.expressionCommentStartDelimiter);
+		if (this.matchesSubstring(this.tags.printStart)) {
+			let token = this.createToken(TokenType.PrintExpressionStart);
+			token.symbol += this.expectSubstring(this.tags.printStart);
 			return token;
 		}
 
 		let token = this.createToken(TokenType.ExpressionStart);
-		token.symbol += this.expectSubstring(this.expressionStartDelimiter);
+		token.symbol += this.expectSubstring(this.tags.expressionStart);
 		return token;
 	}
 
 	private getExpressionEndToken(): Token {
-		if (this.matchesSubstring(this.expressionEndEscapeDelimiter)) {
-			let token = this.createToken(TokenType.ExpressionEndEscape);
-			token.symbol += this.expectSubstring(this.expressionEndEscapeDelimiter);
-			return token;
-		}
-
 		let token = this.createToken(TokenType.ExpressionEnd);
-		token.symbol += this.expectSubstring(this.expressionEndDelimiter);
+		token.symbol += this.expectSubstring(this.tags.expressionEnd);
 		return token;
 	}
 
@@ -204,10 +164,10 @@ export class Lexer {
 			return token;
 		}
 
-		token.tagName = tagName;
+		token.properties.set('tagName', tagName);
 		token.symbol += tagName;
 
-		if (token.tagName === this.blockTagName) {
+		if (tagName === this.tags.blockTagName) {
 			token.type = TokenType.BlockClosingStart;
 		}
 		else {
@@ -226,6 +186,7 @@ export class Lexer {
 			return token;
 		}
 
+		// TODO: Change this to be case insensitive matching
 		if (this.matchesSubstring('[CDATA[')) {
 			token.type = TokenType.CDataStart;
 			token.symbol += this.expectSubstring('[CDATA[');
@@ -244,10 +205,11 @@ export class Lexer {
 	}
 
 	private getElementStartOrBlockToken(token: Token): Token {
-		token.tagName = this.getTagName();
-		token.symbol += token.tagName;
+		let tagName = this.getTagName();
+		token.properties.set('tagName', tagName);
+		token.symbol += tagName;
 
-		if (token.tagName === this.blockTagName) {
+		if (tagName === this.tags.blockTagName) {
 			return this.getBlockToken(token);
 		}
 
@@ -516,16 +478,6 @@ export class Lexer {
 		return chars;
 	}
 
-}
-
-export interface LexerConfiguration {
-	inputString: string;
-	blockTagName: string;
-	expressionStartDelimiter: string;
-	expressionStartEscapeDelimiter: string;
-	expressionCommentStartDelimiter: string;
-	expressionEndDelimiter: string;
-	expressionEndEscapeDelimiter: string;
 }
 
 const LETTERS_REGEX: RegExp = /[a-zA-Z]+/;
