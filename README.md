@@ -5,13 +5,6 @@ A fully featured HTML view renderer for NodeJS.
 npm install hexel-view
 ```
 
-## Todo
-- Write tests
-
-## Bugs
-- Doctype must be case insensitive
-- CData must be case insensitive
-
 ## Features
 - Standard HTML5
 - Embedded JavaScript expressions
