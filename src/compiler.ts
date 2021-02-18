@@ -1,4 +1,4 @@
-import generate  from '@babel/generator';
+import generate from '@babel/generator';
 import * as Types from '@babel/types';
 import Module from 'module';
 import { AppendAttributeNode } from './nodes/append-attribute-node';
@@ -39,6 +39,7 @@ interface ViewModule extends Module {
 
 const MODULE_IDENTIFIER = '__module__';
 const REQUIRE_IDENTIFIER = '__require__';
+const RENDER_FUNCTION_IDENTIFIER = '__RenderView__';
 const RUNTIME_IDENTIFIER = '__runtime__';
 const PARTIAL_IDENTIFIER = '__isPartial__';
 const BLOCK_IDENTIFIER = '$block';
@@ -60,7 +61,7 @@ const BLOCK_IDENTIFIER = '$block';
  */
 export class Compiler {
 
-	public compile(viewNode: ViewNode, viewSourcemaps: object): View {
+	public compile(viewNode: ViewNode, viewSourcemaps: Record<string, unknown>): View {
 		// Build view module AST
 		let program = Types.program([
 			...this.createViewModuleHeaders(),
@@ -87,7 +88,7 @@ export class Compiler {
 		viewModuleCode += `\n\n//# sourceMappingURL=data:application/json;charset=utf8;base64,${base64Sourcemap}`;
 
 		// Compile view module
-		let viewModule = new Module(null) as ViewModule;
+		let viewModule = new Module(viewNode.source.filePath) as ViewModule;
 		viewModule.paths = process.mainModule.paths;
 		viewModule._compile(viewModuleCode, viewNode.source.filePath);
 
@@ -100,13 +101,92 @@ export class Compiler {
 
 		// Create and configure view
 		let view = new View(
-			viewNode.source.filePath,
-			viewModule.exports.renderFunction,
 			viewNode.source,
+			viewModule.exports.renderFunction,
 			viewModuleCode // TODO: Temporary; remove this
 		);
 
 		return view;
+	}
+
+	private createViewModuleHeaders(): Types.Statement[] {
+		return [
+			Types.expressionStatement(
+				Types.assignmentExpression(
+					'=',
+					Types.identifier(MODULE_IDENTIFIER),
+					Types.identifier('module')
+				)
+			),
+			Types.expressionStatement(
+				Types.assignmentExpression(
+					'=',
+					Types.identifier(REQUIRE_IDENTIFIER),
+					Types.identifier('require')
+				)
+			),
+			Types.expressionStatement(
+				Types.assignmentExpression(
+					'=',
+					Types.identifier('module'),
+					Types.assignmentExpression(
+						'=',
+						Types.identifier('require'),
+						Types.identifier('undefined')
+					)
+				)
+			),
+			Types.expressionStatement(
+				Types.callExpression(
+					Types.memberExpression(
+						Types.callExpression(
+							Types.identifier(REQUIRE_IDENTIFIER),
+							[
+								Types.stringLiteral('source-map-support')
+							]
+						),
+						Types.identifier('install')
+					),
+					[
+						Types.objectExpression([
+							Types.objectProperty(
+								Types.identifier('retrieveSourceMap'),
+								Types.arrowFunctionExpression(
+									[
+										Types.identifier('source')
+									],
+									Types.conditionalExpression(
+										Types.binaryExpression(
+											'in',
+											Types.identifier('source'),
+											Types.memberExpression(
+												Types.memberExpression(
+													Types.identifier(MODULE_IDENTIFIER),
+													Types.identifier('exports')
+												),
+												Types.identifier('sourcemaps')
+											)
+										),
+										Types.memberExpression(
+											Types.memberExpression(
+												Types.memberExpression(
+													Types.identifier(MODULE_IDENTIFIER),
+													Types.identifier('exports')
+												),
+												Types.identifier('sourcemaps')
+											),
+											Types.identifier('source'),
+											true
+										),
+										Types.nullLiteral()
+									)
+								)
+							)
+						])
+					]
+				)
+			)
+		];
 	}
 
 	private compileViewNode(node: ViewNode): Types.Statement {
@@ -133,7 +213,7 @@ export class Compiler {
 					Types.identifier('renderFunction')
 				),
 				Types.functionExpression(
-					Types.identifier('__RenderView__'),
+					Types.identifier(RENDER_FUNCTION_IDENTIFIER),
 					[
 						Types.identifier(RUNTIME_IDENTIFIER),
 						Types.identifier(PARTIAL_IDENTIFIER)
@@ -593,86 +673,6 @@ export class Compiler {
 
 	private compileCommentExpressionNode(node: CommentExpressionNode): null {
 		return null;
-	}
-
-	private createViewModuleHeaders(): Types.Statement[] {
-		return [
-			Types.expressionStatement(
-				Types.assignmentExpression(
-					'=',
-					Types.identifier(MODULE_IDENTIFIER),
-					Types.identifier('module')
-				)
-			),
-			Types.expressionStatement(
-				Types.assignmentExpression(
-					'=',
-					Types.identifier(REQUIRE_IDENTIFIER),
-					Types.identifier('require')
-				)
-			),
-			Types.expressionStatement(
-				Types.assignmentExpression(
-					'=',
-					Types.identifier('module'),
-					Types.assignmentExpression(
-						'=',
-						Types.identifier('require'),
-						Types.identifier('undefined')
-					)
-				)
-			),
-			Types.expressionStatement(
-				Types.callExpression(
-					Types.memberExpression(
-						Types.callExpression(
-							Types.identifier(REQUIRE_IDENTIFIER),
-							[
-								Types.stringLiteral('source-map-support')
-							]
-						),
-						Types.identifier('install')
-					),
-					[
-						Types.objectExpression([
-							Types.objectProperty(
-								Types.identifier('retrieveSourceMap'),
-								Types.arrowFunctionExpression(
-									[
-										Types.identifier('source')
-									],
-									Types.conditionalExpression(
-										Types.binaryExpression(
-											'in',
-											Types.identifier('source'),
-											Types.memberExpression(
-												Types.memberExpression(
-													Types.identifier(MODULE_IDENTIFIER),
-													Types.identifier('exports')
-												),
-												Types.identifier('sourcemaps')
-											)
-										),
-										Types.memberExpression(
-											Types.memberExpression(
-												Types.memberExpression(
-													Types.identifier(MODULE_IDENTIFIER),
-													Types.identifier('exports')
-												),
-												Types.identifier('sourcemaps')
-											),
-											Types.identifier('source'),
-											true
-										),
-										Types.nullLiteral()
-									)
-								)
-							)
-						])
-					]
-				)
-			)
-		];
 	}
 
 	private createRuntimeCall(methodName: string, position: Position = null, argumentExpressions: Types.Expression[] = []): Types.CallExpression {

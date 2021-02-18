@@ -6,12 +6,11 @@ import { LayoutNode } from './layout-node';
 export class ViewNode extends CompositeNode {
 
 	public source: Source;
-	public layoutNode: LayoutNode;
+	public layoutNode: LayoutNode = null;
 
 	public constructor(source: Source) {
 		super(new Position(1, 1));
 		this.source = source;
-		this.layoutNode = null;
 	}
 
 }

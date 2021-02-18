@@ -127,6 +127,12 @@ export class Lexer {
 		// 	return token;
 		// }
 
+		if (this.source.matchesSubstring(this.tags.printStart)) {
+			let token = this.createToken(TokenType.PrintExpressionStart);
+			token.symbol += this.source.expectSubstring(this.tags.printStart);
+			return token;
+		}
+
 		if (this.source.matchesSubstring(this.tags.commentStart)) {
 			let token = this.createToken(TokenType.CommentExpressionStart);
 			token.symbol += this.source.expectSubstring(this.tags.commentStart);

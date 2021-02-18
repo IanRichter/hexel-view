@@ -1,42 +1,60 @@
 {
 	"root": true,
-	"parser": "@typescript-eslint/parser",
-	"plugins": [
-		"@typescript-eslint"
+	"ignorePatterns": [
+		"node_modules",
+		"dist",
+		"*.gen.js"
 	],
-	"extends": [
-		"eslint:recommended",
-		"plugin:@typescript-eslint/eslint-recommended",
-		"plugin:@typescript-eslint/recommended"
-	],
-	"rules": {
-		"@typescript-eslint/no-inferrable-types": "off",
-		"@typescript-eslint/explicit-member-accessibility": [
-			"error"
-		],
-		"@typescript-eslint/explicit-function-return-type": [
-			"error",
-			{
-				"allowExpressions": true,
-				"allowHigherOrderFunctions": true
+	"overrides": [
+		{
+			"files": [
+				"*.ts",
+				"*.js"
+			],
+			"parser": "@typescript-eslint/parser",
+			"parserOptions": {
+				"ecmaVersion": 6
+			},
+			"plugins": [
+				"@typescript-eslint"
+			],
+			"extends": [
+				"eslint:recommended",
+				"plugin:@typescript-eslint/eslint-recommended",
+				"plugin:@typescript-eslint/recommended"
+			],
+			"rules": {
+				"@typescript-eslint/no-inferrable-types": "off",
+				"@typescript-eslint/explicit-member-accessibility": [
+					"error"
+				],
+				"@typescript-eslint/explicit-function-return-type": [
+					"error",
+					{
+						"allowExpressions": true,
+						"allowHigherOrderFunctions": true
+					}
+				],
+				"@typescript-eslint/no-unused-vars": "off",
+				"brace-style": [
+					"error",
+					"stroustrup"
+				],
+				"no-extra-semi": [
+					"error"
+				],
+				"semi": [
+					"error"
+				],
+				"prefer-const": "off",
+				"indent": [
+					"error",
+					"tab",
+					{
+						"SwitchCase": 1
+					}
+				]
 			}
-		],
-		"@typescript-eslint/ban-types": "off",
-		"brace-style": [
-			"error",
-			"stroustrup"
-		],
-		"no-extra-semi": [
-			"error"
-		],
-		"semi": [
-			"error"
-		],
-		"prefer-const": "off",
-		"indent": "off"
-		// "indent": [
-		// 	"error",
-		// 	"tab"
-		// ]
-	}
+		}
+	]
 }

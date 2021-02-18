@@ -1,6 +1,6 @@
 export class RenderTarget {
 
-	private slots: object = {};
+	private slots: Record<string, string> = {};
 	private defaultSlot: string = '';
 	private layoutContent: string = '';
 

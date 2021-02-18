@@ -294,7 +294,7 @@ export class Parser {
 		node.quote = this.expectOneOf(HTML_QUOTE_TOKENS);
 
 		node.values = [];
-		while (!this.isEOF()  && !this.matches(node.quote.type)) {
+		while (!this.isEOF() && !this.matches(node.quote.type)) {
 			switch (this.peek().type) {
 				case TokenType.PrintExpressionStart: {
 					this.consume();
@@ -698,7 +698,7 @@ export class Parser {
 
 	private parsePrintExpressionNode(): PrintExpressionNode {
 		let node = new PrintExpressionNode(this.getPosition());
-		this.expect(TokenType.ExpressionStart);
+		this.expect(TokenType.PrintExpressionStart);
 		node.statement = this.parseJSPrintStatement(this.parseValueNode(TokenType.ExpressionEnd));
 		this.expect(TokenType.ExpressionEnd);
 		return node;

@@ -3,7 +3,7 @@ import { Node } from './node';
 
 export class ElementAttributeNode extends Node {
 
-	public name: string = null;
+	public name: string = '';
 	public quote: Token = null;
 
 }

@@ -1,8 +1,10 @@
 import { AttributeSet } from './attribute-set';
+import { Context } from './context';
 import { Environment } from './environment';
 import { RenderTarget } from './render-target';
 
 type AttributeBuilder = (attributeSet: AttributeSet) => void;
+type Collection = unknown[] | Record<string, unknown> | Iterable<unknown>;
 
 export class Runtime {
 
@@ -67,8 +69,7 @@ export class Runtime {
 		this.renderTarget.append(`</${tagName}>`);
 	}
 
-	// TODO: Fix values definition
-	public createNormalAttribute(name: string, quote: string, values: any[]): AttributeBuilder {
+	public createNormalAttribute(name: string, quote: string, values: unknown[]): AttributeBuilder {
 		return attributeSet => {
 			if (values) {
 				let valueString = values.map(value => value.toString()).join('');
@@ -80,14 +81,12 @@ export class Runtime {
 		};
 	}
 
-	// TODO: Fix values definition
-	public createExpressionAttribute(name: string, quote: string, value: any): AttributeBuilder {
+	public createExpressionAttribute(name: string, quote: string, value: unknown): AttributeBuilder {
 		return attributeSet => {
 			attributeSet.setValue(name, quote, value.toString());
 		};
 	}
 
-	// TODO: Fix boolean condition
 	public createConditionalAttribute(name: string, condition: boolean): AttributeBuilder {
 		return attributeSet => {
 			if (condition) {
@@ -96,7 +95,6 @@ export class Runtime {
 		};
 	}
 
-	// TODO: Fix boolean condition
 	public createAppendAttribute(name: string, quote: string, value: string, condition: boolean): AttributeBuilder {
 		return attributeSet => {
 			if (condition) {
@@ -105,20 +103,21 @@ export class Runtime {
 		};
 	}
 
-	// public createCollection(collection: object | Array<any>): Array<any> | Iterable<any> {
-	// 	if (Array.isArray(collection)) {
-	// 		return collection.map((item, index) => [item, index]);
-	// 	}
-	// 	else if (Symbol.iterator in collection) {
-	// 		return collection;
-	// 	}
-	// 	else {
-	// 		return Object.entries(collection)
-	// 			.map(([key, value], index) => [key, value, index]);
-	// 	}
-	// }
+	// TODO: Add support for generic Iterables
+	public createCollection(collection: Collection): Iterable<unknown> {
+		if (Array.isArray(collection)) {
+			return collection.map((item, index) => [item, index]);
+		}
+		else {
+			return Object.entries(collection)
+				.map(([key, value], index) => [key, value, index]);
+		}
+		// else if (Symbol.iterator in collection) {
+		// 	return collection;
+		// }
+	}
 
-	public async renderPartialView(viewPath: string, currentContext: object, partialContext: object): Promise<void> {
+	public async renderPartialView(viewPath: string, currentContext: Context, partialContext: Context): Promise<void> {
 		let partialView = this.environment.getView(viewPath);
 		await partialView.renderPartial(this, {
 			...currentContext,
@@ -126,7 +125,7 @@ export class Runtime {
 		});
 	}
 
-	public async renderValue(inputValue: any | Promise<any>): Promise<void> {
+	public async renderValue(inputValue: unknown | Promise<unknown>): Promise<void> {
 		let outputValue = await Promise.resolve(inputValue);
 		if (outputValue !== undefined && outputValue !== null) {
 			this.renderTarget.append(outputValue.toString());
@@ -156,7 +155,7 @@ export class Runtime {
 		return Boolean(this.layoutViewPath);
 	}
 
-	public async renderLayout(context: object): Promise<void> {
+	public async renderLayout(context: Context): Promise<void> {
 		if (!this.layoutViewPath) {
 			return;
 		}

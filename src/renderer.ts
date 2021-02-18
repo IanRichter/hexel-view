@@ -4,23 +4,23 @@ import { ExpressionTags } from './expression-tags';
 import { Environment } from './environment';
 import { Runtime } from './runtime';
 import { Source } from './source';
+import { Context } from './context';
 
 /**
  * Pipeline:
  * Source -> Lexer(s) -> MultiLexer -> Parser -> Compiler -> Runtime
  */
 
- /**
-  * Provides an interface for rendering Views and integrates with Express.js
-  */
- export class Renderer {
+/**
+ * Provides an interface for rendering Views and integrates with Express.js
+ */
+export class Renderer {
 
 	private environment: Environment;
 
 	public constructor({
 		views = './views',
 		cache = true,
-		writeGeneratedViews = false,
 		tags = {
 			blockTagName: 'js',
 			expressionStart: '{%',
@@ -34,7 +34,6 @@ import { Source } from './source';
 		this.environment = new Environment({
 			rootViewsPath: views,
 			cacheViews: cache,
-			writeGeneratedViews,
 			tags
 		});
 	}
@@ -43,28 +42,28 @@ import { Source } from './source';
 		let fileExtension = 'html';
 
 		expressApp.engine(fileExtension, async (viewPath, context, callback) => {
-			let html = await this.render(viewPath, context);
+			let html = await this.render(viewPath, context as Context);
 			callback(null, html);
 		});
 
 		expressApp.set('view engine', fileExtension);
 	}
 
-	public async render(relativeViewPath: string, context: object = {}, layoutViewPath: string = null): Promise<string> {
+	public async render(relativeViewPath: string, context: Context = {}, layoutViewPath: string = null): Promise<string> {
 		let view = this.environment.getView(relativeViewPath);
 		let runtime = new Runtime(this.environment);
 		await view.render(runtime, context, layoutViewPath);
 		return runtime.getResult();
 	}
 
-	public async renderPartial(relativeViewPath: string, context: object = {}): Promise<string> {
+	public async renderPartial(relativeViewPath: string, context: Context = {}): Promise<string> {
 		let view = this.environment.getView(relativeViewPath);
 		let runtime = new Runtime(this.environment);
 		await view.renderPartial(runtime, context);
 		return runtime.getResult();
 	}
 
-	public async renderFromString(sourceString: string, context: object = {}): Promise<string> {
+	public async renderFromString(sourceString: string, context: Context = {}): Promise<string> {
 		let source = new Source(sourceString);
 		let view = this.environment.createView(source);
 		let runtime = new Runtime(this.environment);
