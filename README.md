@@ -31,29 +31,29 @@ Some additional conveniences have also been added:
 - Any element can use the self-closing element syntax: `<element />`
 
 ## Embedded JavaScript expressions
-### Expression (ExpressionNode)
+### Expression
 ```
 {% expression %}
 ```
 
-### Print expression (PrintExpressioNode)
+### Print expression
 ```html
 {%= expression %}
 ```
 
-### Variable declaration (ExpressionNode)
+### Variable declaration
 ```html
 {% let value = expression %}
 ```
 
-### Expression comment (ExpressionCommentNode)
+### Expression comment
 ```html
 {%# Comment text %}
 ```
 
 ## Enhanced HTML attributes
 
-### Attribute value interpolation (NormalAttributeNode)
+### Attribute value interpolation
 ```html
 <element attribute="{{ expression }}">
 
@@ -61,7 +61,7 @@ E.g.
 <a href="/items/{{ item.id }}/edit">
 ```
 
-### Attribute value as expression (BoundAttributeNode)
+### Attribute value as expression
 ```html
 <element [attribute]="<expression>">
 
@@ -69,7 +69,7 @@ E.g.
 <a [href]="showPath">
 ```
 
-### Append attribute value (AppendAttributeNode)
+### Append attribute value
 ```html
 <element [attribute.value]="<expression>">
 
@@ -77,7 +77,7 @@ E.g.
 <div [class.is-open]="isOpen">
 ```
 
-### Boolean attribute (BooleanAttributeNode)
+### Boolean attribute
 ```html
 <element [?attribute]="<expression>">
 

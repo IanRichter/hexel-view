@@ -9,5 +9,8 @@
 # Build artifacts
 /dist
 
-# IDE
+# IDE - VS Code
 /.vscode
+!/.vscode/settings.json
+!/.vscode/launch.json
+!/.vscode/tasks.json
