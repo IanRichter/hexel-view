@@ -37,23 +37,12 @@ interface ViewModule extends Module {
 	_compile(code: string, filename: string): void;
 }
 
-const MODULE_IDENTIFIER = '__module__';
-const REQUIRE_IDENTIFIER = '__require__';
-const RENDER_FUNCTION_IDENTIFIER = '__RenderView__';
-const RUNTIME_IDENTIFIER = '__runtime__';
-const PARTIAL_IDENTIFIER = '__isPartial__';
-const BLOCK_IDENTIFIER = '$block';
-
-/**
- * Nodes with potential async support:
- * - AttributeNodes
- * - IfNode
- * - ElseIfNode
- * - SwitchNode
- * - ForeachNode
- * - WhileNode
- * - ExpressionNode
- */
+const MODULE_IDENTIFIER: string = '__module__';
+const REQUIRE_IDENTIFIER: string = '__require__';
+const RENDER_FUNCTION_IDENTIFIER: string = '__RenderView__';
+const RUNTIME_IDENTIFIER: string = '__runtime__';
+const PARTIAL_IDENTIFIER: string = '__isPartial__';
+const BLOCK_IDENTIFIER: string = '$block';
 
 // TODO: Figure out how to handle sourcemaps for views created from strings (fake path maybe?)
 /**

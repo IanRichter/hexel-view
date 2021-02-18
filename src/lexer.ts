@@ -12,14 +12,14 @@ const ATTRIBUTE_KEYWORD_START_REGEX: RegExp = /[a-zA-Z0-9]/;
 const ATTRIBUTE_KEYWORD_TERMINATING_CHARS: string[] = ['/', '>', '=', '"', '\'', ...WHITESPACE_CHARS];
 const TAGNAME_TERMINATING_CHARS: string[] = ['/', '>', ...WHITESPACE_CHARS];
 
-const KEYWORDS_MAP = {
+const KEYWORDS_MAP: Record<string, TokenType> = {
 	'in': TokenType.InKeyword
 };
-const ATTRIBUTE_KEYWORDS_MAP = {
+const ATTRIBUTE_KEYWORDS_MAP: Record<string, TokenType> = {
 	'block': TokenType.BlockAttributeKeyword,
 	'context': TokenType.ContextAttributeKeyword
 };
-const BLOCK_KEYWORD_MAP = {
+const BLOCK_KEYWORD_MAP: Record<string, TokenType> = {
 	'print': TokenType.Print,
 	'if': TokenType.If,
 	'else-if': TokenType.ElseIf,
