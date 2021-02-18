@@ -182,3 +182,25 @@ E.g.
 ```html
 <js @render-content />
 ```
+
+## Example
+```html
+<js @if="items.length > 0">
+    <ul class="list">
+        <js @foreach="item, index in items">
+            <li>
+                <a class="link"
+                   href="/items/{{ item.id }}"
+                   [data-id]="item.id"
+                   [?hidden]="!item.isVisible"
+                   [class.is-active]="index === 0">
+                    {{ item.name }}
+                </a>
+            </li>
+        </js>
+    </ul>
+</js>
+<js @else>
+	<div class="empty">No items</div>
+</js>
+```
