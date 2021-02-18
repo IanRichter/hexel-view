@@ -32,7 +32,7 @@ Some additional conveniences have also been added:
 
 ## Embedded JavaScript expressions
 ### Expression
-```
+```html
 {% expression %}
 ```
 
