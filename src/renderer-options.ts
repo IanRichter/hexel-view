@@ -5,4 +5,5 @@ export interface RendererOptions {
 	cache?: boolean;
 	writeGeneratedViews?: boolean;
 	tags?: ExpressionTags;
+	tabSize?: number;
 }

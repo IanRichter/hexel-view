@@ -35,13 +35,13 @@ import { JSValueExpression, JSExpressionStatement, JSPrintStatement } from './js
 import { PrintExpressionNode } from './nodes/print-expression-node';
 import { ATTRIBUTE_NAME_TERMINATING_TOKENS, HTML_QUOTE_TOKENS, INVALID_TEXT_TOKENS, NORMAL_ATTRIBUTE_STRING_TERMINATING_TOKENS, VARIABLE_NAME_START_TOKENS, VARIABLE_NAME_VALID_TOKENS } from './token-constants';
 import { ViewNode } from './nodes/view-node';
-import { Source } from './source';
 import { LayoutNode } from './nodes/layout-node';
 import { VOID_ELEMENTS } from './constants';
 import { ConditionalAttributeNode } from './nodes/conditional-attribute-node';
 import { ExpressionAttributeNode } from './nodes/expression-attribute-node';
 import { RenderContentNode } from './nodes/render-content-node';
 import { ValueNode } from './nodes/value-node';
+import { ParserOptions } from './parser-options';
 
 // TODO: Improve how block nodes consume whitespace newlines (even in text) to "remove" them from the output HTML
 
@@ -50,13 +50,18 @@ import { ValueNode } from './nodes/value-node';
  */
 export class Parser {
 
+	private options: ParserOptions;
 	private lexer: Lexer;
 	private tokenBuffer: Token;
 
-	public parse(lexer: Lexer, source: Source): ViewNode {
-		this.lexer = lexer;
+	public constructor(options: ParserOptions) {
+		this.options = options;
+	}
 
-		let viewNode = new ViewNode(source);
+	public parse(source: string, filePath: string): ViewNode {
+		this.lexer = new Lexer(source, this.options.tags, this.options.tabSize);
+
+		let viewNode = new ViewNode(source, filePath);
 
 		if (this.matches(TokenType.Layout)) {
 			viewNode.layoutNode = this.parseLayoutNode();
@@ -131,13 +136,16 @@ export class Parser {
 			case TokenType.CommentExpressionStart:
 				return this.parseCommentExpressionNode();
 
+			// Invalid location for layout node
+			case TokenType.Layout:
+				throw new ParseError('Layout node must be the first statement in the view.', this.getPosition());
+
 			// Invalid node start tokens
 			case TokenType.ElementClosingStart:
 			case TokenType.ElseIf:
 			case TokenType.Else:
 			case TokenType.Case:
 			case TokenType.DefaultCase:
-			case TokenType.Layout:
 			case TokenType.BlockClosingStart:
 			case TokenType.ExpressionEnd:
 				throw new ParseError('Encountered unexpected token.', this.getPosition());

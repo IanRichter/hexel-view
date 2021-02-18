@@ -2,6 +2,7 @@ import { AttributeSet } from './attribute-set';
 import { Context } from './context';
 import { Environment } from './environment';
 import { RenderTarget } from './render-target';
+import { TemplateError } from './template-error';
 
 type AttributeBuilder = (attributeSet: AttributeSet) => void;
 type Collection = unknown[] | Record<string, unknown> | Iterable<unknown>;
@@ -72,7 +73,7 @@ export class Runtime {
 	public createNormalAttribute(name: string, quote: string, values: unknown[]): AttributeBuilder {
 		return attributeSet => {
 			if (values) {
-				let valueString = values.map(value => value.toString()).join('');
+				let valueString = values.map(this.toStringValue.bind(this)).join('');
 				attributeSet.setValue(name, quote, valueString);
 			}
 			else {
@@ -83,7 +84,7 @@ export class Runtime {
 
 	public createExpressionAttribute(name: string, quote: string, value: unknown): AttributeBuilder {
 		return attributeSet => {
-			attributeSet.setValue(name, quote, value.toString());
+			attributeSet.setValue(name, quote, this.toStringValue(value));
 		};
 	}
 
@@ -98,13 +99,17 @@ export class Runtime {
 	public createAppendAttribute(name: string, quote: string, value: string, condition: boolean): AttributeBuilder {
 		return attributeSet => {
 			if (condition) {
-				attributeSet.appendValue(name, quote, value);
+				attributeSet.appendValue(name, quote, this.toStringValue(value));
 			}
 		};
 	}
 
 	// TODO: Add support for generic Iterables
-	public createCollection(collection: Collection): Iterable<unknown> {
+	public createCollection(collection: Collection, position: [number, number]): Iterable<unknown> {
+		if (!collection) {
+			throw new TemplateError('collection cannot be null.', position);
+		}
+
 		if (Array.isArray(collection)) {
 			return collection.map((item, index) => [item, index]);
 		}
@@ -128,7 +133,7 @@ export class Runtime {
 	public async renderValue(inputValue: unknown | Promise<unknown>): Promise<void> {
 		let outputValue = await Promise.resolve(inputValue);
 		if (outputValue !== undefined && outputValue !== null) {
-			this.renderTarget.append(outputValue.toString());
+			this.renderTarget.append(this.toStringValue(outputValue));
 		}
 	}
 
@@ -170,6 +175,16 @@ export class Runtime {
 
 		this.renderTarget.startLayout();
 		await layoutView.render(this, context);
+	}
+
+	// TODO: Add support for HTMLSafeString, otherwise escape the value
+	private toStringValue(value: unknown): string {
+		if (value === undefined || value === null) {
+			return '';
+		}
+		else {
+			return value.toString();
+		}
 	}
 
 }

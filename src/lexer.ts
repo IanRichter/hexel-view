@@ -1,6 +1,7 @@
 import { WHITESPACE_CHARS } from './constants';
 import { ExpressionTags } from './expression-tags';
-import { Source } from './source';
+import { ParseError } from './parse-error';
+import { Position } from './position';
 import { Token } from './token';
 import { TokenType } from './token-type';
 
@@ -44,28 +45,33 @@ const BLOCK_KEYWORD_MAP: Record<string, TokenType> = {
  */
 export class Lexer {
 
-	private source: Source;
+	private source: string;
+	private sourceCursor: number = 0;
+	private lineNumber: number = 1;
+	private columnNumber: number = 1;
 	private tags: ExpressionTags;
+	private tabSize: number;
 
-	public constructor(source: Source, tags: ExpressionTags) {
+	public constructor(source: string, tags: ExpressionTags, tabSize: number) {
 		this.source = source;
 		this.tags = tags;
+		this.tabSize = tabSize;
 	}
 
 	public parseToken(): Token {
-		if (this.source.isEOF()) {
+		if (this.isEOF()) {
 			return this.createToken(TokenType.EndOfFile);
 		}
 
-		if (this.source.matchesSubstring(this.tags.expressionStart)) {
+		if (this.matchesSubstring(this.tags.expressionStart)) {
 			return this.getExpressionStartToken();
 		}
 
-		if (this.source.matchesSubstring(this.tags.expressionEnd)) {
+		if (this.matchesSubstring(this.tags.expressionEnd)) {
 			return this.getExpressionEndToken();
 		}
 
-		switch (this.source.peek()) {
+		switch (this.peek()) {
 			case '<':
 				return this.getLeftAngleBraceOrMoreToken();
 			case '>':
@@ -104,43 +110,45 @@ export class Lexer {
 				return this.getCharAsToken(TokenType.Backtick);
 		}
 
-		if (this.source.matchesOneOf(WHITESPACE_CHARS)) {
+		if (this.matchesOneOf(WHITESPACE_CHARS)) {
 			return this.getWhitespaceToken();
 		}
 
-		if (this.source.matchesRegex(LETTERS_REGEX)) {
+		if (this.matchesRegex(LETTERS_REGEX)) {
 			return this.getLetters();
 		}
 
-		if (this.source.matchesRegex(NUMBERS_REGEX)) {
+		if (this.matchesRegex(NUMBERS_REGEX)) {
 			return this.getNumbers();
 		}
 
 		return this.getCharAsToken(TokenType.Unknown);
 	}
 
+	// ========================================================================
+
 	private getExpressionStartToken(): Token {
-		// if (this.source.matchesSubstring(this.tags.expressionStartEscape)) {
+		// if (this.matchesSubstring(this.tags.expressionStartEscape)) {
 		// 	let token = this.createToken(TokenType.ExpressionStartEscape);
-		// 	token.symbol += this.source.expectSubstring(this.delimiters.expressionStartEscape);
+		// 	token.symbol += this.expectSubstring(this.delimiters.expressionStartEscape);
 		// 	token.value = this.delimiters.expressionStart;
 		// 	return token;
 		// }
 
-		if (this.source.matchesSubstring(this.tags.printStart)) {
+		if (this.matchesSubstring(this.tags.printStart)) {
 			let token = this.createToken(TokenType.PrintExpressionStart);
-			token.symbol += this.source.expectSubstring(this.tags.printStart);
+			token.symbol += this.expectSubstring(this.tags.printStart);
 			return token;
 		}
 
-		if (this.source.matchesSubstring(this.tags.commentStart)) {
+		if (this.matchesSubstring(this.tags.commentStart)) {
 			let token = this.createToken(TokenType.CommentExpressionStart);
-			token.symbol += this.source.expectSubstring(this.tags.commentStart);
+			token.symbol += this.expectSubstring(this.tags.commentStart);
 			return token;
 		}
 
 		let token = this.createToken(TokenType.ExpressionStart);
-		token.symbol += this.source.expectSubstring(this.tags.expressionStart);
+		token.symbol += this.expectSubstring(this.tags.expressionStart);
 		return token;
 	}
 
@@ -148,31 +156,31 @@ export class Lexer {
 	 * @returns {Token}
 	 */
 	private getExpressionEndToken(): Token {
-		// if (this.source.matchesSubstring(this.delimiters.expressionEndEscape)) {
+		// if (this.matchesSubstring(this.delimiters.expressionEndEscape)) {
 		// 	let token = this.createToken(TokenType.ExpressionEndEscape);
-		// 	token.symbol += this.source.expectSubstring(this.delimiters.expressionEndEscape);
+		// 	token.symbol += this.expectSubstring(this.delimiters.expressionEndEscape);
 		// 	token.value = this.delimiters.expressionEnd;
 		// 	return token;
 		// }
 
 		let token = this.createToken(TokenType.ExpressionEnd);
-		token.symbol += this.source.expectSubstring(this.tags.expressionEnd);
+		token.symbol += this.expectSubstring(this.tags.expressionEnd);
 		return token;
 	}
 
 	private getLeftAngleBraceOrMoreToken(): Token {
 		let token = this.createToken(TokenType.LeftAngleBrace);
-		token.symbol += this.source.expect('<');
+		token.symbol += this.expect('<');
 
-		if (this.source.matches('/')) {
+		if (this.matches('/')) {
 			return this.getClosingTagToken(token);
 		}
 
-		if (this.source.matches('!')) {
+		if (this.matches('!')) {
 			return this.getSpecialTagToken(token);
 		}
 
-		if (TAG_NAME_START_REGEX.test(this.source.peek())) {
+		if (TAG_NAME_START_REGEX.test(this.peek())) {
 			return this.getElementStartOrBlockToken(token);
 		}
 
@@ -180,7 +188,7 @@ export class Lexer {
 	}
 
 	private getClosingTagToken(token: Token): Token {
-		token.symbol += this.source.expect('/');
+		token.symbol += this.expect('/');
 
 		let tagName = this.getTagName();
 		if (!tagName) {
@@ -202,25 +210,25 @@ export class Lexer {
 	}
 
 	private getSpecialTagToken(token: Token): Token {
-		token.symbol += this.source.expect('!');
+		token.symbol += this.expect('!');
 
-		if (this.source.matchesSubstring('--')) {
+		if (this.matchesSubstring('--')) {
 			token.type = TokenType.CommentStart;
-			token.symbol += this.source.expectSubstring('--');
+			token.symbol += this.expectSubstring('--');
 			return token;
 		}
 
 		// TODO: Change to be a case insensitive match
-		if (this.source.matchesSubstring('[CDATA[')) {
+		if (this.matchesSubstring('[CDATA[')) {
 			token.type = TokenType.CDataStart;
-			token.symbol += this.source.expectSubstring('[CDATA[');
+			token.symbol += this.expectSubstring('[CDATA[');
 			return token;
 		}
 
 		// TODO: Change to be a case insensitive match
-		if (this.source.matchesSubstring('DOCTYPE')) {
+		if (this.matchesSubstring('DOCTYPE')) {
 			token.type = TokenType.Doctype;
-			token.symbol += this.source.expectSubstring('DOCTYPE');
+			token.symbol += this.expectSubstring('DOCTYPE');
 			return token;
 		}
 
@@ -242,12 +250,12 @@ export class Lexer {
 	}
 
 	private getBlockToken(token: Token): Token {
-		token.symbol += this.source.consumeOptionalWhitespace();
+		token.symbol += this.consumeOptionalWhitespace();
 
-		if (this.source.matches('@')) {
-			token.symbol += this.source.expect('@');
+		if (this.matches('@')) {
+			token.symbol += this.expect('@');
 
-			let keyword = this.source.consumeUntilMatchesOneOf(ATTRIBUTE_KEYWORD_TERMINATING_CHARS);
+			let keyword = this.consumeUntilMatchesOneOf(ATTRIBUTE_KEYWORD_TERMINATING_CHARS);
 			token.symbol += keyword;
 
 			if (keyword in BLOCK_KEYWORD_MAP) {
@@ -266,11 +274,11 @@ export class Lexer {
 
 	private getRightSquareBraceOrMoreToken(): Token {
 		let token = this.createToken(TokenType.RightSquareBrace);
-		token.symbol += this.source.expect(']');
+		token.symbol += this.expect(']');
 
-		if (this.source.matchesSubstring(']>')) {
+		if (this.matchesSubstring(']>')) {
 			token.type = TokenType.CDataEnd;
-			token.symbol += this.source.expectSubstring(']>');
+			token.symbol += this.expectSubstring(']>');
 			return token;
 		}
 
@@ -279,14 +287,14 @@ export class Lexer {
 
 	private getAttributekKeywordToken(): Token {
 		let token = this.createToken();
-		token.symbol += this.source.expect('@');
+		token.symbol += this.expect('@');
 
-		if (!ATTRIBUTE_KEYWORD_START_REGEX.test(this.source.peek())) {
+		if (!ATTRIBUTE_KEYWORD_START_REGEX.test(this.peek())) {
 			token.type = TokenType.At;
 			return token;
 		}
 
-		let keyword = this.source.consumeUntilMatchesOneOf(ATTRIBUTE_KEYWORD_TERMINATING_CHARS);
+		let keyword = this.consumeUntilMatchesOneOf(ATTRIBUTE_KEYWORD_TERMINATING_CHARS);
 		token.properties.set('keyword', keyword);
 		token.symbol += keyword;
 
@@ -301,34 +309,34 @@ export class Lexer {
 
 	private getDashOrMoreToken(): Token {
 		let token = this.createToken();
-		token.symbol += this.source.expect('-');
+		token.symbol += this.expect('-');
 
-		if (!this.source.matches('-')) {
+		if (!this.matches('-')) {
 			token.type = TokenType.Dash;
 			return token;
 		}
 
-		token.symbol += this.source.expect('-');
+		token.symbol += this.expect('-');
 
-		if (!this.source.matches('>')) {
+		if (!this.matches('>')) {
 			token.type = TokenType.DoubleDash;
 			return token;
 		}
 
 		token.type = TokenType.CommentEnd;
-		token.symbol += this.source.expect('>');
+		token.symbol += this.expect('>');
 		return token;
 	}
 
 	private getWhitespaceToken(): Token {
 		let token = this.createToken(TokenType.Whitespace);
-		token.symbol += this.source.expectWhitespace();
+		token.symbol += this.expectWhitespace();
 		return token;
 	}
 
 	private getLetters(): Token {
 		let token = this.createToken(TokenType.Letters);
-		token.symbol += this.source.consumeRegex(LETTERS_REGEX);
+		token.symbol += this.consumeRegex(LETTERS_REGEX);
 
 		if (token.symbol in KEYWORDS_MAP) {
 			token.type = KEYWORDS_MAP[token.symbol];
@@ -339,26 +347,181 @@ export class Lexer {
 
 	private getNumbers(): Token {
 		let token = this.createToken(TokenType.Numbers);
-		token.symbol += this.source.consumeRegex(NUMBERS_REGEX);
+		token.symbol += this.consumeRegex(NUMBERS_REGEX);
 		return token;
 	}
 
 	private getTagName(): string {
-		if (!TAG_NAME_START_REGEX.test(this.source.peek())) {
+		if (!TAG_NAME_START_REGEX.test(this.peek())) {
 			return null;
 		}
 
-		return this.source.consumeUntilMatchesOneOf(TAGNAME_TERMINATING_CHARS).toLowerCase();
+		return this.consumeUntilMatchesOneOf(TAGNAME_TERMINATING_CHARS).toLowerCase();
 	}
 
+	// ========================================================================
+
 	private createToken(type: TokenType = null): Token {
-		return new Token(type, this.source.getPosition(), '');
+		return new Token(type, this.getPosition(), '');
 	}
 
 	private getCharAsToken(tokenType: TokenType): Token {
 		let token = this.createToken(tokenType);
-		token.symbol += this.source.consume();
+		token.symbol += this.consume();
 		return token;
+	}
+
+	private getPosition(): Position {
+		return new Position(this.lineNumber, this.columnNumber);
+	}
+
+	private isEOF(): boolean {
+		return this.sourceCursor >= this.source.length;
+	}
+
+	private peek(): string {
+		if (this.isEOF()) {
+			return null;
+		}
+
+		return this.source[this.sourceCursor];
+	}
+
+	private matches(char: string): boolean {
+		return this.peek() === char;
+	}
+
+	private matchesOneOf(chars: string[]): boolean {
+		return chars.some(char => this.matches(char));
+	}
+
+	private matchesSubstring(substring: string): boolean {
+		if (this.sourceCursor + substring.length > this.source.length) {
+			return false;
+		}
+
+		for (let i = 0; i < substring.length; i++) {
+			if (substring[i] !== this.source[this.sourceCursor + i]) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private matchesRegex(regex: RegExp): boolean {
+		regex = new RegExp(regex, 'y');
+		regex.lastIndex = this.sourceCursor;
+		return regex.test(this.source);
+	}
+
+	// lookAheadMatches(char) {
+	// 	const amount = 1;
+	// 	return this.sourceCursor + amount < this.source.length && this.source[this.sourceCursor + amount] === char;
+	// }
+
+	private consume(): string {
+		if (this.isEOF()) {
+			throw new ParseError('Unexpected end of file.', this.getPosition());
+		}
+
+		let char = this.source[this.sourceCursor];
+		this.sourceCursor++;
+
+		if (char === '\n') {
+			this.lineNumber++;
+			this.columnNumber = 1;
+		}
+		else if (char === '\t') {
+			this.columnNumber += this.tabSize;
+		}
+		else {
+			this.columnNumber++;
+		}
+
+		return char;
+	}
+
+	private consumeUntilMatches(matchChar: string): string {
+		let chars = '';
+		while (!this.matches(matchChar)) {
+			chars += this.consume();
+		}
+		return chars;
+	}
+
+	private consumeUntilMatchesOneOf(matchChars: string[]): string {
+		let chars = '';
+		while (!this.matchesOneOf(matchChars)) {
+			chars += this.consume();
+		}
+		return chars;
+	}
+
+	private consumeOptionalWhitespace(): string {
+		let chars = '';
+		while (this.matchesOneOf(WHITESPACE_CHARS)) {
+			chars += this.consume();
+		}
+		return chars;
+	}
+
+	private consumeRegex(regex: RegExp): string {
+		regex = new RegExp(regex, 'y');
+		regex.lastIndex = this.sourceCursor;
+		let match = regex.exec(this.source);
+
+		if (!match) {
+			return null;
+		}
+
+		let chars = match[0];
+		this.sourceCursor += chars.length;
+		this.columnNumber += chars.length;
+		return chars;
+	}
+
+	private expect(char: string): string {
+		if (!this.matches(char)) {
+			throw new ParseError('Encountered unexpected character.', this.getPosition());
+		}
+
+		return this.consume();
+	}
+
+	private expectOneOf(chars: string[]): string {
+		if (!this.matchesOneOf(chars)) {
+			throw new ParseError('Encountered unexpected character.', this.getPosition());
+		}
+
+		return this.consume();
+	}
+
+	private expectSubstring(substring: string): string {
+		for (let i = 0; i < substring.length; i++) {
+			if (substring[i] !== this.source[this.sourceCursor + i]) {
+				let position = this.getPosition();
+				position.column += i;
+				throw new ParseError('Encountered unexpected character.', position);
+			}
+		}
+
+		this.sourceCursor += substring.length;
+		this.columnNumber += substring.length;
+		return substring;
+	}
+
+	private expectWhitespace(): string {
+		let chars = '';
+		while (this.matchesOneOf(WHITESPACE_CHARS)) {
+			chars += this.consume();
+		}
+
+		if (chars.length === 0) {
+			throw new ParseError('Expected one or more whitespace characters.', this.getPosition());
+		}
+
+		return chars;
 	}
 
 }

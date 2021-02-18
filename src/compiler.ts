@@ -45,6 +45,7 @@ const PARTIAL_IDENTIFIER: string = '__isPartial__';
 const BLOCK_IDENTIFIER: string = '$block';
 
 // TODO: Figure out how to handle sourcemaps for views created from strings (fake path maybe?)
+// TODO: Add positions to scope calls for better error messages.
 /**
  * Compiles an Abstract Syntax Tree into a Render Function.
  */
@@ -67,9 +68,9 @@ export class Compiler {
 				compact: false,
 				concise: false,
 				sourceMaps: true,
-				sourceFileName: viewNode.source.filePath
+				sourceFileName: viewNode.filePath
 			},
-			viewNode.source.sourceString
+			viewNode.source
 		);
 
 		// Append view module sourcemap to code
@@ -77,23 +78,25 @@ export class Compiler {
 		viewModuleCode += `\n\n//# sourceMappingURL=data:application/json;charset=utf8;base64,${base64Sourcemap}`;
 
 		// Compile view module
-		let viewModule = new Module(viewNode.source.filePath) as ViewModule;
+		let viewModule = new Module(viewNode.filePath) as ViewModule;
 		viewModule.paths = process.mainModule.paths;
-		viewModule._compile(viewModuleCode, viewNode.source.filePath);
+		viewModule._compile(viewModuleCode, viewNode.filePath);
 
 		// Inject view module sourcemap into exports
 		viewModule.exports.sourcemaps = viewSourcemaps;
-		viewSourcemaps[viewNode.source.filePath] = {
-			url: viewNode.source.filePath,
+		viewSourcemaps[viewNode.filePath] = {
+			url: viewNode.filePath,
 			map: viewModuleSourcemap
 		};
 
 		// Create and configure view
-		let view = new View(
-			viewNode.source,
-			viewModule.exports.renderFunction,
-			viewModuleCode // TODO: Temporary; remove this
-		);
+		let view = new View({
+			source: viewNode.source,
+			filePath: viewNode.filePath,
+			ast: viewNode,
+			code: viewModuleCode,
+			renderFunction: viewModule.exports.renderFunction
+		});
 
 		return view;
 	}
@@ -533,7 +536,8 @@ export class Compiler {
 					]
 				),
 				this.createRuntimeCall('createCollection', node.position, [
-					node.collection
+					node.collection,
+					this.createPositionExpression(node.position)
 				]),
 				Types.blockStatement(
 					this.compileNodes(node.childNodes)
@@ -694,6 +698,13 @@ export class Compiler {
 		};
 
 		return node;
+	}
+
+	private createPositionExpression(position: Position): Types.ArrayExpression {
+		return Types.arrayExpression([
+			Types.numericLiteral(position.line),
+			Types.numericLiteral(position.column)
+		]);
 	}
 
 }

@@ -5,10 +5,7 @@ A fully featured HTML view renderer for NodeJS.
 npm install hexel-view
 ```
 
-## TODO
-- Rename `BlockValue` for Parser
-- Split expression into two types: Output and non-output
-- Add `@layout` support
+## Todo
 - Write tests
 
 ## Bugs
@@ -150,16 +147,6 @@ E.g.
 </js>
 ```
 
-### Empty iteration alternative
-```html
-<js @foreach="...">
-	...
-</js>
-<js @else>
-	...
-</js>
-```
-
 ## While statement
 ```html
 <js @while="<condition>">
@@ -174,9 +161,9 @@ E.g.
 
 ## Layouts and slots
 
-### Extending views
+### Layouts
 ```html
-<js @extend="<parent-view-path>" />
+<js @layout="<layout-view-path>" />
 ```
 
 ### Slot content
@@ -188,10 +175,10 @@ E.g.
 
 ### Render slot
 ```html
-<js @render-slot="<slot-name>" />
+<js @render-content="<slot-name>" />
 ```
 
 ### Render default slot
 ```html
-<js @render-default-slot />
+<js @render-content />
 ```

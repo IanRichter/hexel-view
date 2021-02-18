@@ -1,8 +1,6 @@
 import path from 'path';
 import fs from 'fs';
 
-import { Source } from './source';
-import { Lexer } from './lexer';
 import { Parser } from './parser';
 import { Compiler } from './compiler';
 import { View } from './view';
@@ -12,6 +10,7 @@ export interface EnvironmentOptions {
 	rootViewsPath: string;
 	cacheViews: boolean;
 	tags: ExpressionTags;
+	tabSize: number;
 }
 
 export class Environment {
@@ -21,17 +20,20 @@ export class Environment {
 	private viewCache: Map<string, View>;
 	private viewSourcemaps: Record<string, unknown>;
 	private tags: ExpressionTags;
+	private tabSize: number;
 
 	public constructor({
 		rootViewsPath,
 		cacheViews,
-		tags
+		tags,
+		tabSize
 	}: EnvironmentOptions) {
 		this.rootViewsPath = rootViewsPath;
 		this.cacheViews = cacheViews;
 		this.viewCache = new Map();
 		this.viewSourcemaps = {};
 		this.tags = tags;
+		this.tabSize = tabSize;
 	}
 
 	public verifyViewPath(relativeViewPath: string): string {
@@ -51,9 +53,8 @@ export class Environment {
 			return this.viewCache.get(absoluteViewPath);
 		}
 
-		let sourceString = fs.readFileSync(absoluteViewPath, { encoding: 'utf-8' });
-		let source = new Source(sourceString, absoluteViewPath);
-		let view = this.createView(source);
+		let source = fs.readFileSync(absoluteViewPath, { encoding: 'utf-8' });
+		let view = this.createView(source, absoluteViewPath);
 
 		if (this.cacheViews) {
 			this.viewCache.set(absoluteViewPath, view);
@@ -62,10 +63,12 @@ export class Environment {
 		return view;
 	}
 
-	public createView(source: Source): View {
-		let lexer = new Lexer(source, this.tags);
-		let parser = new Parser();
-		let viewNode = parser.parse(lexer, source);
+	public createView(source: string, filePath: string): View {
+		let parser = new Parser({
+			tags: this.tags,
+			tabSize: this.tabSize
+		});
+		let viewNode = parser.parse(source, filePath);
 
 		let compiler = new Compiler();
 		let view = compiler.compile(viewNode, this.viewSourcemaps);

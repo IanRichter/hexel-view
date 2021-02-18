@@ -3,7 +3,6 @@ import { RendererOptions } from './renderer-options';
 import { ExpressionTags } from './expression-tags';
 import { Environment } from './environment';
 import { Runtime } from './runtime';
-import { Source } from './source';
 import { Context } from './context';
 
 /**
@@ -27,14 +26,16 @@ export class Renderer {
 			expressionEnd: '%}',
 			printStart: '{%=',
 			commentStart: '{%#'
-		}
+		},
+		tabSize = 4
 	}: RendererOptions = {}) {
 		this.verifyTags(tags);
 
 		this.environment = new Environment({
 			rootViewsPath: views,
 			cacheViews: cache,
-			tags
+			tags,
+			tabSize
 		});
 	}
 
@@ -63,9 +64,9 @@ export class Renderer {
 		return runtime.getResult();
 	}
 
-	public async renderFromString(sourceString: string, context: Context = {}): Promise<string> {
-		let source = new Source(sourceString);
-		let view = this.environment.createView(source);
+	// TODO: Generated unique fakepath for string views
+	public async renderFromString(source: string, context: Context = {}): Promise<string> {
+		let view = this.environment.createView(source, '');
 		let runtime = new Runtime(this.environment);
 		await view.render(runtime, context);
 		return runtime.getResult();
