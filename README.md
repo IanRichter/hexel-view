@@ -55,10 +55,10 @@ Some additional conveniences have also been added:
 
 ### Attribute value interpolation
 ```html
-<element attribute="{{ expression }}">
+<element attribute="{%= expression %}">
 
 E.g.
-<a href="/items/{{ item.id }}/edit">
+<a href="/items/{%= item.id %}/edit">
 ```
 
 ### Attribute value as expression
