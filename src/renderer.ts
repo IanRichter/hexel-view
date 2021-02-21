@@ -17,6 +17,7 @@ import { ExpressOptions } from './express-options';
 export class Renderer {
 
 	private environment: Environment;
+	private layout: string;
 
 	public constructor({
 		views = './views',
@@ -28,6 +29,7 @@ export class Renderer {
 			printStart: '{%=',
 			commentStart: '{%#'
 		},
+		layout = null,
 		tabSize = 4
 	}: RendererOptions = {}) {
 		this.verifyTags(tags);
@@ -38,6 +40,7 @@ export class Renderer {
 			tags,
 			tabSize
 		});
+		this.layout = layout;
 	}
 
 	public setupExpress(expressApp: Express, { extension = 'html', isDefault = true }: ExpressOptions = {}): void {
@@ -51,7 +54,7 @@ export class Renderer {
 		}
 	}
 
-	public async render(relativeViewPath: string, context: Context = {}, layoutViewPath: string = null): Promise<string> {
+	public async render(relativeViewPath: string, context: Context = {}, layoutViewPath: string = this.layout): Promise<string> {
 		let view = this.environment.getView(relativeViewPath);
 		let runtime = new Runtime(this.environment);
 		await view.render(runtime, context, layoutViewPath);
