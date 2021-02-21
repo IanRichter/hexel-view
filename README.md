@@ -7,7 +7,7 @@ npm install hexel-view
 ```
 
 **Note:** Hexel View is still in the early stages of development, and as such it has not
-beend thoroughly tested or documented yet. Caution is adviced when using this library
+been thoroughly tested or documented yet. Caution is adviced when using this library
 in production environments.
 
 ## Features
