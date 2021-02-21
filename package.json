@@ -17,7 +17,7 @@
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
 	"scripts": {
-		"start": "ts-node test/test.ts",
+		"start": "ts-node demo/demo.ts",
 		"build": "tsc",
 		"lint": "eslint .",
 		"test": "cross-env TS_NODE_FILES=true mocha --exit --require ts-node/register --colors test/**/*.test.ts",

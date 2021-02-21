@@ -1,8 +1,6 @@
 import { parse, parseExpression } from '@babel/parser';
 import * as Types from '@babel/types';
 import { Lexer } from './lexer';
-import { ParseError } from './parse-error';
-import { Token } from './token';
 import { TokenType } from './token-type';
 import { Position } from './position';
 import { Node } from './nodes/node';
@@ -52,7 +50,6 @@ export class Parser {
 
 	private options: ParserOptions;
 	private lexer: Lexer;
-	private tokenBuffer: Token;
 
 	public constructor(options: ParserOptions) {
 		this.options = options;
@@ -63,11 +60,11 @@ export class Parser {
 
 		let viewNode = new ViewNode(source, filePath);
 
-		if (this.matches(TokenType.Layout)) {
+		if (this.lexer.matches(TokenType.Layout)) {
 			viewNode.layoutNode = this.parseLayoutNode();
 		}
 
-		while (!this.isEOF()) {
+		while (!this.lexer.isEOF()) {
 			viewNode.childNodes.push(this.parseNode());
 		}
 
@@ -77,27 +74,27 @@ export class Parser {
 	// ========================================================================
 
 	private parseLayoutNode(): LayoutNode {
-		let node = new LayoutNode(this.getPosition());
-		this.expect(TokenType.Layout);
+		let node = new LayoutNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.Layout);
 
 		let valueNode = this.parseBlockValueNode();
 		node.value = valueNode.value.trim();
 		if (node.value.length === 0) {
-			throw new ParseError('Expected a view path.', valueNode.position);
+			this.lexer.throwError('Expected a view path.', valueNode.position);
 		}
 
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.ForwardSlash);
-		this.expect(TokenType.RightAngleBrace);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.ForwardSlash);
+		this.lexer.expect(TokenType.RightAngleBrace);
 		return node;
 	}
 
 	private parseNode(): Node {
-		if (this.isEOF()) {
-			throw new ParseError('Unexpected end of file.', this.getPosition());
+		if (this.lexer.isEOF()) {
+			this.lexer.throwError('Unexpected end of file.');
 		}
 
-		switch (this.peek().type) {
+		switch (this.lexer.peek().type) {
 			// Standard HTML
 			case TokenType.Whitespace:
 				return this.parseWhitespaceNode();
@@ -138,7 +135,8 @@ export class Parser {
 
 			// Invalid location for layout node
 			case TokenType.Layout:
-				throw new ParseError('Layout node must be the first statement in the view.', this.getPosition());
+				this.lexer.throwError('Layout node must be the first statement in the view.');
+				break;
 
 			// Invalid node start tokens
 			case TokenType.ElementClosingStart:
@@ -148,7 +146,8 @@ export class Parser {
 			case TokenType.DefaultCase:
 			case TokenType.BlockClosingStart:
 			case TokenType.ExpressionEnd:
-				throw new ParseError('Encountered unexpected token.', this.getPosition());
+				this.lexer.throwError('Encountered unexpected token.');
+				break;
 		}
 
 		return this.parseTextNode();
@@ -157,7 +156,7 @@ export class Parser {
 	private parseNodesUntilMatches(tokenType: TokenType): Node[] {
 		let nodes = [];
 
-		while (!this.matches(tokenType)) {
+		while (!this.lexer.matches(tokenType)) {
 			nodes.push(this.parseNode());
 		}
 
@@ -165,22 +164,22 @@ export class Parser {
 	}
 
 	private parseWhitespaceNode(): WhitespaceNode {
-		let node = new WhitespaceNode(this.getPosition());
-		node.textContent = this.expect(TokenType.Whitespace).symbol;
+		let node = new WhitespaceNode(this.lexer.getPosition());
+		node.textContent = this.lexer.expect(TokenType.Whitespace).symbol;
 		return node;
 	}
 
 	private parseTextNode(): TextNode {
-		let node = new TextNode(this.getPosition());
+		let node = new TextNode(this.lexer.getPosition());
 
-		while (!this.isEOF() && !this.matchesOneOf(INVALID_TEXT_TOKENS)) {
-			switch (this.peek().type) {
+		while (!this.lexer.isEOF() && !this.lexer.matchesOneOf(INVALID_TEXT_TOKENS)) {
+			switch (this.lexer.peek().type) {
 				// case TokenType.ExpressionStartEscape:
 				// case TokenType.ExpressionEndEscape:
-				// 	node.textContent += this.consume().value;
+				// 	node.textContent += this.lexer.consume().value;
 				// 	break;
 				default:
-					node.textContent += this.consume().symbol;
+					node.textContent += this.lexer.consume().symbol;
 			}
 		}
 
@@ -188,55 +187,55 @@ export class Parser {
 	}
 
 	private parseEmbeddedLanguageTextNode(tagName: string): TextNode {
-		let node = new TextNode(this.getPosition());
-		node.textContent = this.consumeWhile(() => !this.matches(TokenType.ElementClosingStart) || this.peek().properties.get('tagName') !== tagName);
+		let node = new TextNode(this.lexer.getPosition());
+		node.textContent = this.lexer.consumeWhile(() => !this.lexer.matches(TokenType.ElementClosingStart) || this.lexer.peek().properties.get('tagName') !== tagName);
 		return node;
 	}
 
 	private parseCommentNode(): CommentNode {
-		let node = new CommentNode(this.getPosition());
-		this.expect(TokenType.CommentStart);
-		node.textContent = this.consumeWhile(() => !this.matches(TokenType.CommentEnd));
-		this.expect(TokenType.CommentEnd);
+		let node = new CommentNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.CommentStart);
+		node.textContent = this.lexer.consumeWhile(() => !this.lexer.matches(TokenType.CommentEnd));
+		this.lexer.expect(TokenType.CommentEnd);
 		return node;
 	}
 
 	private parseCDataNode(): CDataNode {
-		let node = new CDataNode(this.getPosition());
-		this.expect(TokenType.CDataStart);
-		node.textContent = this.consumeWhile(() => !this.matches(TokenType.CDataEnd));
-		this.expect(TokenType.CDataEnd);
+		let node = new CDataNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.CDataStart);
+		node.textContent = this.lexer.consumeWhile(() => !this.lexer.matches(TokenType.CDataEnd));
+		this.lexer.expect(TokenType.CDataEnd);
 		return node;
 	}
 
 	private parseDoctypeNode(): DoctypeNode {
-		let node = new DoctypeNode(this.getPosition());
-		this.expect(TokenType.Doctype);
-		this.expect(TokenType.Whitespace);
-		this.expectWithSymbol(TokenType.Letters, 'html');
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.RightAngleBrace);
+		let node = new DoctypeNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.Doctype);
+		this.lexer.expect(TokenType.Whitespace);
+		this.lexer.expectWithSymbol(TokenType.Letters, 'html');
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.RightAngleBrace);
 		return node;
 	}
 
 	private parseElementNode(): ElementNode {
-		let node = new ElementNode(this.getPosition());
-		node.tagName = this.expect(TokenType.ElementStart).properties.get('tagName');
+		let node = new ElementNode(this.lexer.getPosition());
+		node.tagName = this.lexer.expect(TokenType.ElementStart).properties.get('tagName');
 		node.isVoid = VOID_ELEMENTS.includes(node.tagName);
-		this.consumeOptional(TokenType.Whitespace);
+		this.lexer.consumeOptional(TokenType.Whitespace);
 
 		let terminatingTokens = [TokenType.ForwardSlash, TokenType.RightAngleBrace];
-		while (!this.matchesOneOf(terminatingTokens)) {
+		while (!this.lexer.matchesOneOf(terminatingTokens)) {
 			node.attributes.push(this.parseAttributeNode());
-			this.consumeOptional(TokenType.Whitespace);
+			this.lexer.consumeOptional(TokenType.Whitespace);
 		}
 
-		if (this.matches(TokenType.ForwardSlash)) {
-			this.consume();
+		if (this.lexer.matches(TokenType.ForwardSlash)) {
+			this.lexer.consume();
 			node.isSelfClosing = true;
 		}
 
-		this.expect(TokenType.RightAngleBrace);
+		this.lexer.expect(TokenType.RightAngleBrace);
 
 		if (node.isVoid || node.isSelfClosing) {
 			return node;
@@ -252,36 +251,36 @@ export class Parser {
 		node.closingNode = this.parseElementClosingNode();
 
 		if (node.closingNode.tagName !== node.tagName) {
-			throw new ParseError('Encountered mismatched closing tag.', node.closingNode.position);
+			this.lexer.throwError('Encountered mismatched closing tag.', node.closingNode.position);
 		}
 
 		return node;
 	}
 
 	private parseElementClosingNode(): ElementClosingNode {
-		let node = new ElementClosingNode(this.getPosition());
-		node.tagName = this.expect(TokenType.ElementClosingStart).properties.get('tagName');
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.RightAngleBrace);
+		let node = new ElementClosingNode(this.lexer.getPosition());
+		node.tagName = this.lexer.expect(TokenType.ElementClosingStart).properties.get('tagName');
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.RightAngleBrace);
 		return node;
 	}
 
 	private parseAttributeNode(): ElementAttributeNode {
-		let position = this.getPosition();
+		let position = this.lexer.getPosition();
 
-		if (!this.matches(TokenType.LeftSquareBrace)) {
+		if (!this.lexer.matches(TokenType.LeftSquareBrace)) {
 			return this.parseNormalAttributeNode(position);
 		}
 
-		this.expect(TokenType.LeftSquareBrace);
+		this.lexer.expect(TokenType.LeftSquareBrace);
 
-		if (this.matches(TokenType.QuestionMark)) {
+		if (this.lexer.matches(TokenType.QuestionMark)) {
 			return this.parseConditionalAttributeNode(position);
 		}
 
 		let name = this.parseAttributeName();
 
-		if (this.matches(TokenType.Dot)) {
+		if (this.lexer.matches(TokenType.Dot)) {
 			return this.parseAppendAttributeNode(position, name);
 		}
 
@@ -291,133 +290,134 @@ export class Parser {
 	private parseNormalAttributeNode(position: Position): NormalAttributeNode {
 		let node = new NormalAttributeNode(position);
 		node.name = this.parseAttributeName();
-		this.consumeOptional(TokenType.Whitespace);
+		this.lexer.consumeOptional(TokenType.Whitespace);
 
-		if (!this.matches(TokenType.Equals)) {
+		if (!this.lexer.matches(TokenType.Equals)) {
 			return node;
 		}
 
-		this.expect(TokenType.Equals);
-		this.consumeOptional(TokenType.Whitespace);
-		node.quote = this.expectOneOf(HTML_QUOTE_TOKENS);
+		this.lexer.expect(TokenType.Equals);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		node.quote = this.lexer.expectOneOf(HTML_QUOTE_TOKENS);
 
 		node.values = [];
-		while (!this.isEOF() && !this.matches(node.quote.type)) {
-			switch (this.peek().type) {
+		while (!this.lexer.isEOF() && !this.lexer.matches(node.quote.type)) {
+			switch (this.lexer.peek().type) {
 				case TokenType.PrintExpressionStart: {
-					this.consume();
+					this.lexer.consume();
 					node.values.push(
 						this.parseJSValueExpression(this.parseValueNode(TokenType.ExpressionEnd))
 					);
-					this.expect(TokenType.ExpressionEnd);
+					this.lexer.expect(TokenType.ExpressionEnd);
 					break;
 				}
 				case TokenType.ExpressionStart:
 				case TokenType.CommentExpressionStart:
-					this.consume();
-					this.consumeWhile(() => !this.matches(TokenType.ExpressionEnd));
-					this.expect(TokenType.ExpressionEnd);
+					this.lexer.consume();
+					this.lexer.consumeWhile(() => !this.lexer.matches(TokenType.ExpressionEnd));
+					this.lexer.expect(TokenType.ExpressionEnd);
 					break;
 				case TokenType.ExpressionEnd:
-					throw new ParseError('Encountered unexpected token.', this.getPosition());
+					this.lexer.throwError('Encountered unexpected token.');
+					break;
 				// case TokenType.ExpressionStartEscape:
 				// case TokenType.ExpressionEndEscape:
-				// 	node.values.push(this.consume().value);
+				// 	node.values.push(this.lexer.consume().value);
 				// 	break;
 				default: {
-					let value = this.consumeWhile(() => !this.matches(node.quote.type) && !this.matchesOneOf(NORMAL_ATTRIBUTE_STRING_TERMINATING_TOKENS));
+					let value = this.lexer.consumeWhile(() => !this.lexer.matches(node.quote.type) && !this.lexer.matchesOneOf(NORMAL_ATTRIBUTE_STRING_TERMINATING_TOKENS));
 					node.values.push(value);
 				}
 			}
 		}
 
-		this.expect(node.quote.type);
+		this.lexer.expect(node.quote.type);
 		return node;
 	}
 
 	private parseConditionalAttributeNode(position: Position): ConditionalAttributeNode {
 		let node = new ConditionalAttributeNode(position);
-		this.expect(TokenType.QuestionMark);
+		this.lexer.expect(TokenType.QuestionMark);
 		node.name = this.parseAttributeName();
-		this.expect(TokenType.RightSquareBrace);
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.Equals);
-		this.consumeOptional(TokenType.Whitespace);
-		node.quote = this.expectOneOf(HTML_QUOTE_TOKENS);
+		this.lexer.expect(TokenType.RightSquareBrace);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.Equals);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		node.quote = this.lexer.expectOneOf(HTML_QUOTE_TOKENS);
 		node.condition = this.parseJSValueExpression(this.parseValueNode(node.quote.type));
-		this.expect(node.quote.type);
+		this.lexer.expect(node.quote.type);
 		return node;
 	}
 
 	private parseAppendAttributeNode(position: Position, name: string): AppendAttributeNode {
 		let node = new AppendAttributeNode(position);
 		node.name = name;
-		this.expect(TokenType.Dot);
-		node.value = this.consumeWhile(() => !this.matchesOneOf(ATTRIBUTE_NAME_TERMINATING_TOKENS));
-		this.expect(TokenType.RightSquareBrace);
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.Equals);
-		this.consumeOptional(TokenType.Whitespace);
-		node.quote = this.expectOneOf(HTML_QUOTE_TOKENS);
+		this.lexer.expect(TokenType.Dot);
+		node.value = this.lexer.consumeWhile(() => !this.lexer.matchesOneOf(ATTRIBUTE_NAME_TERMINATING_TOKENS));
+		this.lexer.expect(TokenType.RightSquareBrace);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.Equals);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		node.quote = this.lexer.expectOneOf(HTML_QUOTE_TOKENS);
 		node.condition = this.parseJSValueExpression(this.parseValueNode(node.quote.type));
-		this.expect(node.quote.type);
+		this.lexer.expect(node.quote.type);
 		return node;
 	}
 
 	private parseExpressionAttributeNode(position: Position, name: string): ExpressionAttributeNode {
 		let node = new ExpressionAttributeNode(position);
 		node.name = name;
-		this.expect(TokenType.RightSquareBrace);
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.Equals);
-		this.consumeOptional(TokenType.Whitespace);
-		node.quote = this.expectOneOf(HTML_QUOTE_TOKENS);
+		this.lexer.expect(TokenType.RightSquareBrace);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.Equals);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		node.quote = this.lexer.expectOneOf(HTML_QUOTE_TOKENS);
 		node.expression = this.parseJSValueExpression(this.parseValueNode(node.quote.type));
-		this.expect(node.quote.type);
+		this.lexer.expect(node.quote.type);
 		return node;
 	}
 
 	private parseAttributeName(): string {
-		let name = this.consumeWhile(() => !this.matchesOneOf(ATTRIBUTE_NAME_TERMINATING_TOKENS));
+		let name = this.lexer.consumeWhile(() => !this.lexer.matchesOneOf(ATTRIBUTE_NAME_TERMINATING_TOKENS));
 
 		if (name.length === 0) {
-			throw new ParseError('Expected valid attribute name.', this.getPosition());
+			this.lexer.throwError('Expected valid attribute name.');
 		}
 
 		return name;
 	}
 
 	private parseScopeNode(): ScopeNode {
-		let node = new ScopeNode(this.getPosition());
-		this.expect(TokenType.Scope);
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.RightAngleBrace);
+		let node = new ScopeNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.Scope);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.RightAngleBrace);
 		node.childNodes = this.parseNodesUntilMatches(TokenType.BlockClosingStart);
 		this.parseBlockClosingNode();
 		return node;
 	}
 
 	private parseIfNode(): IfNode {
-		let node = new IfNode(this.getPosition());
-		this.expect(TokenType.If);
+		let node = new IfNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.If);
 		node.condition = this.parseJSValueExpression(this.parseBlockValueNode());
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.RightAngleBrace);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.RightAngleBrace);
 		node.childNodes = this.parseNodesUntilMatches(TokenType.BlockClosingStart);
 		this.parseBlockClosingNode();
 
-		while (!this.isEOF()) {
-			if (this.matches(TokenType.Whitespace)) {
-				this.consume();
+		while (!this.lexer.isEOF()) {
+			if (this.lexer.matches(TokenType.Whitespace)) {
+				this.lexer.consume();
 			}
-			else if (this.matches(TokenType.CommentExpressionStart)) {
+			else if (this.lexer.matches(TokenType.CommentExpressionStart)) {
 				this.parseCommentExpressionNode();
 			}
-			else if (this.matches(TokenType.ElseIf)) {
+			else if (this.lexer.matches(TokenType.ElseIf)) {
 				node.alternateNode = this.parseElseIfNode();
 				break;
 			}
-			else if (this.matches(TokenType.Else)) {
+			else if (this.lexer.matches(TokenType.Else)) {
 				node.alternateNode = this.parseElseNode();
 				break;
 			}
@@ -430,26 +430,26 @@ export class Parser {
 	}
 
 	private parseElseIfNode(): ElseIfNode {
-		let node = new ElseIfNode(this.getPosition());
-		this.expect(TokenType.ElseIf);
+		let node = new ElseIfNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.ElseIf);
 		node.condition = this.parseJSValueExpression(this.parseBlockValueNode());
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.RightAngleBrace);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.RightAngleBrace);
 		node.childNodes = this.parseNodesUntilMatches(TokenType.BlockClosingStart);
 		this.parseBlockClosingNode();
 
-		while (!this.isEOF()) {
-			if (this.matches(TokenType.Whitespace)) {
-				this.consume();
+		while (!this.lexer.isEOF()) {
+			if (this.lexer.matches(TokenType.Whitespace)) {
+				this.lexer.consume();
 			}
-			else if (this.matches(TokenType.CommentExpressionStart)) {
+			else if (this.lexer.matches(TokenType.CommentExpressionStart)) {
 				this.parseCommentExpressionNode();
 			}
-			else if (this.matches(TokenType.ElseIf)) {
+			else if (this.lexer.matches(TokenType.ElseIf)) {
 				node.alternateNode = this.parseElseIfNode();
 				break;
 			}
-			else if (this.matches(TokenType.Else)) {
+			else if (this.lexer.matches(TokenType.Else)) {
 				node.alternateNode = this.parseElseNode();
 				break;
 			}
@@ -462,41 +462,41 @@ export class Parser {
 	}
 
 	private parseElseNode(): ElseNode {
-		let node = new ElseNode(this.getPosition());
-		this.expect(TokenType.Else);
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.RightAngleBrace);
+		let node = new ElseNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.Else);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.RightAngleBrace);
 		node.childNodes = this.parseNodesUntilMatches(TokenType.BlockClosingStart);
 		this.parseBlockClosingNode();
 		return node;
 	}
 
 	private parseSwitchNode(): SwitchNode {
-		let node = new SwitchNode(this.getPosition());
-		this.expect(TokenType.Switch);
+		let node = new SwitchNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.Switch);
 		node.expression = this.parseJSValueExpression(this.parseBlockValueNode());
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.RightAngleBrace);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.RightAngleBrace);
 
-		while (!this.isEOF() && !this.matches(TokenType.BlockClosingStart)) {
-			if (this.matches(TokenType.Whitespace)) {
-				this.consume();
+		while (!this.lexer.isEOF() && !this.lexer.matches(TokenType.BlockClosingStart)) {
+			if (this.lexer.matches(TokenType.Whitespace)) {
+				this.lexer.consume();
 			}
-			else if (this.matches(TokenType.CommentExpressionStart)) {
+			else if (this.lexer.matches(TokenType.CommentExpressionStart)) {
 				this.parseCommentExpressionNode();
 			}
-			else if (this.matches(TokenType.Case)) {
+			else if (this.lexer.matches(TokenType.Case)) {
 				node.cases.push(this.parseCaseNode());
 			}
-			else if (this.matches(TokenType.DefaultCase)) {
+			else if (this.lexer.matches(TokenType.DefaultCase)) {
 				if (node.defaultCase) {
-					throw new ParseError('Encountered multiple default block tokens.', this.getPosition());
+					this.lexer.throwError('Encountered multiple default block tokens.');
 				}
 
 				node.defaultCase = this.parseDefaultCaseNode();
 			}
 			else {
-				throw new ParseError('Encountered unexpected token.', this.getPosition());
+				this.lexer.throwError('Encountered unexpected token.');
 			}
 		}
 
@@ -505,65 +505,65 @@ export class Parser {
 	}
 
 	private parseCaseNode(): CaseNode {
-		let node = new CaseNode(this.getPosition());
-		this.expect(TokenType.Case);
+		let node = new CaseNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.Case);
 		node.expression = this.parseJSValueExpression(this.parseBlockValueNode());
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.RightAngleBrace);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.RightAngleBrace);
 		node.childNodes = this.parseNodesUntilMatches(TokenType.BlockClosingStart);
 		this.parseBlockClosingNode();
 		return node;
 	}
 
 	private parseDefaultCaseNode(): DefaultCaseNode {
-		let node = new DefaultCaseNode(this.getPosition());
-		this.expect(TokenType.DefaultCase);
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.RightAngleBrace);
+		let node = new DefaultCaseNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.DefaultCase);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.RightAngleBrace);
 		node.childNodes = this.parseNodesUntilMatches(TokenType.BlockClosingStart);
 		this.parseBlockClosingNode();
 		return node;
 	}
 
 	private parseForeachNode(): ForeachNode {
-		let node = new ForeachNode(this.getPosition());
-		this.expect(TokenType.Foreach);
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.Equals);
-		this.consumeOptional(TokenType.Whitespace);
-		let quote = this.expectOneOf(HTML_QUOTE_TOKENS);
+		let node = new ForeachNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.Foreach);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.Equals);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		let quote = this.lexer.expectOneOf(HTML_QUOTE_TOKENS);
 
-		while (!this.isEOF()) {
+		while (!this.lexer.isEOF()) {
 			if (node.identifiers.length > 0) {
-				this.expect(TokenType.Comma);
+				this.lexer.expect(TokenType.Comma);
 			}
 
-			this.consumeOptional(TokenType.Whitespace);
+			this.lexer.consumeOptional(TokenType.Whitespace);
 			let identifier = this.parseVariableNameValueNode();
 
 			if (node.hasIdentifier(identifier)) {
-				throw new ParseError('Encountered duplicate identifier in foreach.', identifier.position);
+				this.lexer.throwError('Encountered duplicate identifier in foreach.', identifier.position);
 			}
 
 			node.identifiers.push(identifier);
-			this.consumeOptional(TokenType.Whitespace);
+			this.lexer.consumeOptional(TokenType.Whitespace);
 
-			if (!this.matches(TokenType.Comma)) {
+			if (!this.lexer.matches(TokenType.Comma)) {
 				break;
 			}
 		}
 
 		if (node.identifiers.length === 0) {
-			throw new ParseError('Expected one of more identifiers.', this.getPosition());
+			this.lexer.throwError('Expected one of more identifiers.');
 		}
 
-		this.expect(TokenType.InKeyword);
-		this.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.InKeyword);
+		this.lexer.consumeOptional(TokenType.Whitespace);
 		node.collection = this.parseJSValueExpression(this.parseValueNode(quote.type));
-		this.expect(quote.type);
-		this.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(quote.type);
+		this.lexer.consumeOptional(TokenType.Whitespace);
 
-		this.expect(TokenType.RightAngleBrace);
+		this.lexer.expect(TokenType.RightAngleBrace);
 		node.childNodes = this.parseNodesUntilMatches(TokenType.BlockClosingStart);
 		this.parseBlockClosingNode();
 
@@ -571,106 +571,106 @@ export class Parser {
 	}
 
 	private parseWhileNode(): WhileNode {
-		let node = new WhileNode(this.getPosition());
-		this.expect(TokenType.While);
+		let node = new WhileNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.While);
 		node.condition = this.parseJSValueExpression(this.parseBlockValueNode());
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.RightAngleBrace);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.RightAngleBrace);
 		node.childNodes = this.parseNodesUntilMatches(TokenType.BlockClosingStart);
 		this.parseBlockClosingNode();
 		return node;
 	}
 
 	private parseRenderNode(): RenderNode {
-		let node = new RenderNode(this.getPosition());
-		this.expect(TokenType.Render);
+		let node = new RenderNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.Render);
 		node.viewPath = this.parseBlockValueNode().value.trim();
-		this.consumeOptional(TokenType.Whitespace);
+		this.lexer.consumeOptional(TokenType.Whitespace);
 
-		if (this.matches(TokenType.ContextAttributeKeyword)) {
-			this.consume();
+		if (this.lexer.matches(TokenType.ContextAttributeKeyword)) {
+			this.lexer.consume();
 			node.context = this.parseJSValueExpression(this.parseBlockValueNode());
-			this.consumeOptional(TokenType.Whitespace);
+			this.lexer.consumeOptional(TokenType.Whitespace);
 		}
 
-		this.expect(TokenType.ForwardSlash);
-		this.expect(TokenType.RightAngleBrace);
+		this.lexer.expect(TokenType.ForwardSlash);
+		this.lexer.expect(TokenType.RightAngleBrace);
 		return node;
 	}
 
 	private parseRenderContentNode(): RenderContentNode {
-		let node = new RenderContentNode(this.getPosition());
-		this.expect(TokenType.RenderContent);
-		this.consumeOptional(TokenType.Whitespace);
+		let node = new RenderContentNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.RenderContent);
+		this.lexer.consumeOptional(TokenType.Whitespace);
 
-		if (this.matches(TokenType.Equals)) {
+		if (this.lexer.matches(TokenType.Equals)) {
 			node.slotName = this.parseBlockValueNode().value.trim();
 		}
 
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.ForwardSlash);
-		this.expect(TokenType.RightAngleBrace);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.ForwardSlash);
+		this.lexer.expect(TokenType.RightAngleBrace);
 		return node;
 	}
 
 	private parseContentForNode(): ContentForNode {
-		let node = new ContentForNode(this.getPosition());
-		this.expect(TokenType.ContentFor);
+		let node = new ContentForNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.ContentFor);
 		node.slotName = this.parseBlockValueNode().value.trim();
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.RightAngleBrace);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.RightAngleBrace);
 		node.childNodes = this.parseNodesUntilMatches(TokenType.BlockClosingStart);
 		this.parseBlockClosingNode();
 		return node;
 	}
 
 	private parsePrintNode(): PrintNode {
-		let node = new PrintNode(this.getPosition());
-		this.expect(TokenType.Print);
+		let node = new PrintNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.Print);
 		node.expression = this.parseJSValueExpression(this.parseBlockValueNode());
-		this.consumeOptional(TokenType.Whitespace);
+		this.lexer.consumeOptional(TokenType.Whitespace);
 
-		if (this.matches(TokenType.BlockAttributeKeyword)) {
-			this.consume();
-			this.consumeOptional(TokenType.Whitespace);
-			this.expect(TokenType.Equals);
-			this.consumeOptional(TokenType.Whitespace);
-			let quote = this.expectOneOf(HTML_QUOTE_TOKENS);
-			while (!this.isEOF()) {
-				this.consumeOptional(TokenType.Whitespace);
+		if (this.lexer.matches(TokenType.BlockAttributeKeyword)) {
+			this.lexer.consume();
+			this.lexer.consumeOptional(TokenType.Whitespace);
+			this.lexer.expect(TokenType.Equals);
+			this.lexer.consumeOptional(TokenType.Whitespace);
+			let quote = this.lexer.expectOneOf(HTML_QUOTE_TOKENS);
+			while (!this.lexer.isEOF()) {
+				this.lexer.consumeOptional(TokenType.Whitespace);
 
-				if (this.matches(quote.type)) {
+				if (this.lexer.matches(quote.type)) {
 					break;
 				}
 
 				if (node.blockArgs.length > 0) {
-					this.expect(TokenType.Comma);
-					this.consumeOptional(TokenType.Whitespace);
+					this.lexer.expect(TokenType.Comma);
+					this.lexer.consumeOptional(TokenType.Whitespace);
 				}
 
 				node.blockArgs.push(this.parseVariableNameValueNode());
 			}
 
-			this.expect(quote.type);
+			this.lexer.expect(quote.type);
 
 			if (node.blockArgs.length === 0) {
-				throw new ParseError('Expected one or more arguments.', this.getPosition());
+				this.lexer.throwError('Expected one or more arguments.');
 			}
 
-			this.consumeOptional(TokenType.Whitespace);
+			this.lexer.consumeOptional(TokenType.Whitespace);
 		}
 
-		if (this.matches(TokenType.ForwardSlash)) {
+		if (this.lexer.matches(TokenType.ForwardSlash)) {
 			if (node.blockArgs.length > 0) {
-				throw new ParseError('Expected block body.', this.getPosition());
+				this.lexer.throwError('Expected block body.');
 			}
 
-			this.expect(TokenType.ForwardSlash);
-			this.expect(TokenType.RightAngleBrace);
+			this.lexer.expect(TokenType.ForwardSlash);
+			this.lexer.expect(TokenType.RightAngleBrace);
 		}
 		else {
 			node.hasBlock = true;
-			this.expect(TokenType.RightAngleBrace);
+			this.lexer.expect(TokenType.RightAngleBrace);
 			node.childNodes = this.parseNodesUntilMatches(TokenType.BlockClosingStart);
 			this.parseBlockClosingNode();
 		}
@@ -679,59 +679,59 @@ export class Parser {
 	}
 
 	private parseBlockClosingNode(): BlockClosingNode {
-		let node = new BlockClosingNode(this.getPosition());
-		this.expect(TokenType.BlockClosingStart);
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.RightAngleBrace);
+		let node = new BlockClosingNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.BlockClosingStart);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.RightAngleBrace);
 		return node;
 	}
 
 	private parseBlockValueNode(): ValueNode {
-		this.consumeOptional(TokenType.Whitespace);
-		this.expect(TokenType.Equals);
-		this.consumeOptional(TokenType.Whitespace);
-		let quote = this.expectOneOf(HTML_QUOTE_TOKENS);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		this.lexer.expect(TokenType.Equals);
+		this.lexer.consumeOptional(TokenType.Whitespace);
+		let quote = this.lexer.expectOneOf(HTML_QUOTE_TOKENS);
 		let node = this.parseValueNode(quote.type);
-		this.expect(quote.type);
+		this.lexer.expect(quote.type);
 		return node;
 	}
 
 	private parseExpressionNode(): ExpressionNode {
-		let node = new ExpressionNode(this.getPosition());
-		this.expect(TokenType.ExpressionStart);
+		let node = new ExpressionNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.ExpressionStart);
 		node.statement = this.parseJSExpressionStatement(this.parseValueNode(TokenType.ExpressionEnd));
-		this.expect(TokenType.ExpressionEnd);
+		this.lexer.expect(TokenType.ExpressionEnd);
 		return node;
 	}
 
 	private parsePrintExpressionNode(): PrintExpressionNode {
-		let node = new PrintExpressionNode(this.getPosition());
-		this.expect(TokenType.PrintExpressionStart);
+		let node = new PrintExpressionNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.PrintExpressionStart);
 		node.statement = this.parseJSPrintStatement(this.parseValueNode(TokenType.ExpressionEnd));
-		this.expect(TokenType.ExpressionEnd);
+		this.lexer.expect(TokenType.ExpressionEnd);
 		return node;
 	}
 
 	private parseCommentExpressionNode(): CommentExpressionNode {
-		let node = new CommentExpressionNode(this.getPosition());
-		this.expect(TokenType.CommentExpressionStart);
-		node.textContent = this.consumeWhile(() => !this.matches(TokenType.ExpressionEnd));
-		this.expect(TokenType.ExpressionEnd);
+		let node = new CommentExpressionNode(this.lexer.getPosition());
+		this.lexer.expect(TokenType.CommentExpressionStart);
+		node.textContent = this.lexer.consumeWhile(() => !this.lexer.matches(TokenType.ExpressionEnd));
+		this.lexer.expect(TokenType.ExpressionEnd);
 		return node;
 	}
 
 	// ========================================================================
 
 	private parseValueNode(terminatingToken: TokenType): ValueNode {
-		let node = new ValueNode(this.getPosition());
-		node.value = this.consumeWhile(() => !this.matches(terminatingToken));
+		let node = new ValueNode(this.lexer.getPosition());
+		node.value = this.lexer.consumeWhile(() => !this.lexer.matches(terminatingToken));
 		return node;
 	}
 
 	private parseVariableNameValueNode(): ValueNode {
-		let node = new ValueNode(this.getPosition());
-		node.value = this.expectOneOf(VARIABLE_NAME_START_TOKENS).symbol;
-		node.value += this.consumeWhile(() => this.matchesOneOf(VARIABLE_NAME_VALID_TOKENS));
+		let node = new ValueNode(this.lexer.getPosition());
+		node.value = this.lexer.expectOneOf(VARIABLE_NAME_START_TOKENS).symbol;
+		node.value += this.lexer.consumeWhile(() => this.lexer.matchesOneOf(VARIABLE_NAME_VALID_TOKENS));
 		return node;
 	}
 
@@ -755,7 +755,7 @@ export class Parser {
 		let statement = this.parseJSStatement(valueNode);
 
 		if (Types.isVariableDeclaration(statement)) {
-			throw new ParseError(`Variable declarations are not allowed in this context.`, valueNode.position);
+			this.lexer.throwError(`Variable declarations are not allowed in this context.`, valueNode.position);
 		}
 
 		return statement as JSPrintStatement;
@@ -769,17 +769,17 @@ export class Parser {
 		});
 
 		if (result.program.body.length !== 1) {
-			throw new ParseError('Expected exactly 1 statement.', valueNode.position);
+			this.lexer.throwError('Expected exactly 1 statement.', valueNode.position);
 		}
 
 		let statement = result.program.body[0];
 
 		if (!Types.isExpressionStatement(statement) && !Types.isVariableDeclaration(statement)) {
-			throw new ParseError('Encountered unsupported statement.', valueNode.position);
+			this.lexer.throwError('Encountered unsupported statement.', valueNode.position);
 		}
 
 		if (Types.isVariableDeclaration(statement) && statement.kind !== 'let') {
-			throw new ParseError(`Variable declarations are only supported for the 'let' keyword.`, valueNode.position);
+			this.lexer.throwError(`Variable declarations are only supported for the 'let' keyword.`, valueNode.position);
 		}
 
 		return this.overrideJSNodePosition(statement, valueNode.position);
@@ -800,105 +800,6 @@ export class Parser {
 		};
 
 		return node;
-	}
-
-	// ========================================================================
-
-	private getToken(): Token {
-		if (!this.tokenBuffer) {
-			this.tokenBuffer = this.lexer.parseToken();
-		}
-
-		return this.tokenBuffer;
-	}
-
-	private consumeToken(): Token {
-		let token = this.getToken();
-
-		if (token.type !== TokenType.EndOfFile) {
-			this.tokenBuffer = null;
-		}
-
-		return token;
-	}
-
-	private getPosition(): Position {
-		return this.getToken().position;
-	}
-
-	private isEOF(): boolean {
-		return this.getToken().type === TokenType.EndOfFile;
-	}
-
-	private peek(): Token {
-		return this.getToken();
-	}
-
-	private matches(tokenType: TokenType): boolean {
-		return this.getToken().type === tokenType;
-	}
-
-	private matchesOneOf(tokenTypes: TokenType[]): boolean {
-		return tokenTypes.some(tokenType => this.matches(tokenType));
-	}
-
-	private matchesWithSymbol(tokenType: TokenType, symbol: string): boolean {
-		let token = this.getToken();
-		return token.type === tokenType && token.symbol === symbol;
-	}
-
-	private consume(): Token {
-		return this.consumeToken();
-	}
-
-	private consumeOptional(tokenType: TokenType): Token {
-		let token = this.getToken();
-
-		if (token.type !== tokenType) {
-			return null;
-		}
-
-		return this.consumeToken();
-	}
-
-	private consumeWhile(conditionFunction: () => boolean): string {
-		let string = '';
-		while (conditionFunction()) {
-			string += this.consume().symbol;
-		}
-		return string;
-	}
-
-	private expect(tokenType: TokenType): Token {
-		if (this.isEOF()) {
-			throw new ParseError('Unexpected end of file.', this.getPosition());
-		}
-
-		let token = this.consumeToken();
-
-		if (token.type !== tokenType) {
-			throw new ParseError('Encountered unexpected token.', token.position);
-		}
-
-		return token;
-	}
-
-	private expectOneOf(tokenTypes: TokenType[]): Token {
-		for (let tokenType of tokenTypes) {
-			if (this.matches(tokenType)) {
-				return this.consume();
-			}
-		}
-
-		throw new ParseError('Encountered unexpected token.', this.getPosition());
-	}
-
-	private expectWithSymbol(tokenType: TokenType, symbol: string): Token {
-		if (!this.matchesWithSymbol(tokenType, symbol)) {
-			throw new ParseError('Encountered unexpected token.', this.getPosition());
-		}
-
-		return this.consume();
 	}
 
 }

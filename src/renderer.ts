@@ -4,6 +4,7 @@ import { ExpressionTags } from './expression-tags';
 import { Environment } from './environment';
 import { Runtime } from './runtime';
 import { Context } from './context';
+import { ExpressOptions } from './express-options';
 
 /**
  * Pipeline:
@@ -39,15 +40,15 @@ export class Renderer {
 		});
 	}
 
-	public setupExpress(expressApp: Express): void {
-		let fileExtension = 'html';
-
-		expressApp.engine(fileExtension, async (viewPath, context, callback) => {
+	public setupExpress(expressApp: Express, { extension = 'html', isDefault = true }: ExpressOptions = {}): void {
+		expressApp.engine(extension, async (viewPath, context, callback) => {
 			let html = await this.render(viewPath, context as Context);
 			callback(null, html);
 		});
 
-		expressApp.set('view engine', fileExtension);
+		if (isDefault) {
+			expressApp.set('view engine', extension);
+		}
 	}
 
 	public async render(relativeViewPath: string, context: Context = {}, layoutViewPath: string = null): Promise<string> {
@@ -70,6 +71,12 @@ export class Renderer {
 		let runtime = new Runtime(this.environment);
 		await view.render(runtime, context);
 		return runtime.getResult();
+	}
+
+	// TODO: DEMO ONLY. REMOVE THIS.
+	public getViewCode(relativeViewPath: string): string {
+		let view = this.environment.getView(relativeViewPath);
+		return view.code;
 	}
 
 	private verifyTags(tags: ExpressionTags): void {
