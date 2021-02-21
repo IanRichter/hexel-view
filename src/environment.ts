@@ -37,7 +37,7 @@ export class Environment {
 	}
 
 	public verifyViewPath(relativeViewPath: string): string {
-		let absoluteViewPath = path.join(this.rootViewsPath, relativeViewPath);
+		let absoluteViewPath = path.resolve(this.rootViewsPath, relativeViewPath);
 
 		if (!fs.existsSync(absoluteViewPath)) {
 			throw new Error(`View not found: ${absoluteViewPath}`);
