@@ -10,7 +10,7 @@ npm install hexel-view
 been thoroughly tested or documented yet. Caution is adviced when using this library
 in production environments.
 
-See the [changelog](./changelog) for a list of changes between versions.
+See the [changelog](./changelog.md) for a list of changes between versions.
 
 ## Features
 - Standard HTML5
