@@ -10,6 +10,8 @@ npm install hexel-view
 been thoroughly tested or documented yet. Caution is adviced when using this library
 in production environments.
 
+See the [changelog](./changelog) for a list of changes between versions.
+
 ## Features
 - Standard HTML5
 - Embedded JavaScript expressions
@@ -30,6 +32,12 @@ Some additional conveniences have also been added:
 - Any element can use the self-closing element syntax: `<element />`
 
 ## Embedded JavaScript expressions
+
+### Context
+Views are provided a context object that injects data into the view. Within templates this context
+object can be accessed via `this`, e.g. `this.items`. The context of a partial view is a merge of the global context
+data injected into the root view, and the locals injected into the partial view.
+
 ### Expression
 The expression will be evaluated, but not output to your template, allowing you
 to perform operations like you would in Javascript. Only a single expression is
@@ -253,7 +261,7 @@ output anything.
 </js>
 ```
 
-## API
+## Setup
 
 ### 1. Import the Renderer
 ```javascript
@@ -278,8 +286,13 @@ let renderer = new Renderer({
 The `Renderer` supports various options, which are listed below:
 ```typescript
 interface RendererOptions {
+	// Path to views. Will be converted to absolute path if it isn't already.
 	views?: string = 'views';
+
+	// Whether to cache views after compiling them the first time.
 	cache?: boolean = true;
+
+	// The keywords used to identify specific language features.
 	tags?: {
 		blockTagName: string = 'js';
 		expressionStart: string = '{%';
@@ -287,13 +300,17 @@ interface RendererOptions {
 		printStart: string = '{%=';
 		commentStart: string = '{%#';
 	};
+
+	// Path to the default layout to use for all views.
 	layout?: string = null;
+
+	// How many space characters each tab character should represent.
 	tabSize?: number = 4;
 }
 ```
 
 ### 3. ExpressJS integration (optional)
-Hexel integrates seamlessly with ExpressJS. All you have to do is to
+Hexel integrates seamlessly with [ExpressJS](https://expressjs.com/). All you have to do is to
 call the setup method with your express server instance:
 ```javascript
 renderer.setupExpress(expressApp, {
@@ -305,6 +322,29 @@ You can configure the integration using the options listed below:
 ```typescript
 interface ExpressOptions {
 	extension?: string = 'html';
-	isDefault?: boolean = true;
+	default?: boolean = true;
 }
 ```
+
+Now you can simply use it the way you use any other express render engine:
+```javascript
+app.get('/', (request, response) => {
+	response.render('path/to/view.html', {
+		message: 'Hello, world!'
+	});
+});
+```
+
+**Note:** When rendering views through the express API, the special keyword `__layout` within the context object
+can be used to set the layout to use, in addition to the global and inline approaches described before.
+
+## API
+### `Renderer`
+#### `render(viewPath: string, context?: Context = {}, layoutPath?: string): Promise<string>`
+Renders a view, with support for layouts.
+
+#### `renderPartial(viewPath: string, context?: Context = {}, layoutPath?: string): Promise<string>`
+Renders a partial view. Does not support specifying a layout.
+
+#### `renderFromString(source: string, context?: Context = {}): Promise<string>`
+Renders a view from a string. Does not currently support source maps.
