@@ -15,7 +15,7 @@ export interface EnvironmentOptions {
 
 export class Environment {
 
-	private rootViewsPath: string;
+	public readonly rootViewsPath: string;
 	private cacheViews: boolean;
 	private viewCache: Map<string, View>;
 	private viewSourcemaps: Record<string, unknown>;

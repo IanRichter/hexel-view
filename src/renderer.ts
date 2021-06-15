@@ -43,10 +43,18 @@ export class Renderer {
 		this.layout = layout;
 	}
 
-	public setupExpress(expressApp: Express, { extension = 'html', isDefault = true }: ExpressOptions = {}): void {
+	public setupExpress(expressApp: Express, { extension = 'html', default: isDefault = true }: ExpressOptions = {}): void {
+		expressApp.set('views', this.environment.rootViewsPath);
+
 		expressApp.engine(extension, async (viewPath, context, callback) => {
-			let html = await this.render(viewPath, context as Context);
-			callback(null, html);
+			let layout = context['__layout'];
+			try {
+				let html = await this.render(viewPath, context as Context, layout);
+				callback(null, html);
+			}
+			catch (error) {
+				callback(error);
+			}
 		});
 
 		if (isDefault) {
