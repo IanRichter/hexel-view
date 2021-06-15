@@ -166,6 +166,7 @@ export class Runtime {
 		}
 
 		if (this.layoutViewStack.includes(this.layoutViewPath)) {
+			// TODO: Include cycle in error
 			throw new Error('Cycle detected in view layouts.');
 		}
 
