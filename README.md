@@ -246,11 +246,11 @@ output anything.
         <js @foreach="item, index in items">
             <li>
                 <a class="link"
-                   href="/items/{{ item.id }}"
+                   href="/items/{%= item.id %}"
                    [data-id]="item.id"
                    [?hidden]="!item.isVisible"
                    [class.is-active]="index === 0">
-                    {{ item.name }}
+                    {%= item.name %}
                 </a>
             </li>
         </js>
